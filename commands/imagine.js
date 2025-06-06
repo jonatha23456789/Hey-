@@ -7,7 +7,7 @@ const { sendMessage } = require('../handles/sendMessage');
 const FIREWORKS_API_KEY = 'fw_3ZUFwM2boU9JvizzBEr5HvJg';
 
 module.exports = {
-  name: 'imagegen',
+  name: 'imagine',
   description: 'Generate images via prompt using the Flux model.',
   usage: '-imagegen [prompt]',
   author: 'coffee',
