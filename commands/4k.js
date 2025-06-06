@@ -21,7 +21,7 @@ const getImageUrl = async (event, token) => {
 };
 
 module.exports = {
-  name: 'upscale',
+  name: '4k',
   description: 'Enhance low-quality images using Pixelcut upscaler.',
   usage: '-upscale (reply to a photo)',
   author: 'coffee',
