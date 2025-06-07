@@ -5,7 +5,7 @@ const ytsr = require('@distube/ytsr');
 const BASE_URL = 'https://snap-video3.p.rapidapi.com/download';
 
 module.exports = {
-    name: 'ytmusic',
+    name: 'music',
     description: 'Searches for songs on YouTube and provides audio links.',
     usage: '-music <song name>',
     author: 'coffee',
