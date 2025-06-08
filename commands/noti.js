@@ -1,5 +1,6 @@
 const { sendMessage } = require('../handles/sendMessage');
 const axios = require("axios");
+
 const pageid = '311549272052785';
 const kupal = ["8592033747492364"];
 
@@ -20,7 +21,7 @@ async function getAllPSIDs(pageAccessToken) {
         });
       });
 
-      previous = response.data.paging.next || null;
+      previous = response.data.paging?.next || null;
     }
 
     return psids;
@@ -39,6 +40,8 @@ async function sendNotificationToAllUsers(message, pageAccessToken) {
         message: { text: message },
       });
     } catch (error) {
+      // You can log the error if you want:
+      // console.error(`Failed to send message to ${psid}: ${error.message}`);
     }
   }
 }
@@ -48,16 +51,17 @@ module.exports = {
   description: 'send notification to all user',
   author: 'Cliff',
   usage: "sendnoti <message>",
-  async execute(senderId, args, pageAccessToken, sendMessage) {
+  
+  async execute(senderId, args, pageAccessToken) {
 
-    if (!kupal.some(kupal_ka => kupal_ka === senderId)) {
+    if (!kupal.includes(senderId)) {
       sendMessage(senderId, { text: "This command is only for pagebot owner." }, pageAccessToken);
       return;
     }
 
     const message = args.join(' ');
     if (!message) {
-      sendMessage(senderId, { text: 'Please provide a text message' }, pageAccessToken);
+      sendMessage(senderId, { text: 'Please provide a text message.' }, pageAccessToken);
       return;
     }
 
