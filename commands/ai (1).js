@@ -99,7 +99,7 @@ module.exports = {
     history.push({ role: 'model', parts: [{ text: reply }] });
     conversations.set(senderId, history.slice(-20));
 
-    const prefix = '💬 | 𝙶𝚘𝚘𝚐𝚕𝚎 𝙶𝚎𝚖𝚒𝚗𝚒\n・───────────・\n';
+    const prefix = '🤖 | ᎪΝᏆᎷᎬ ҒϴᏟႮՏ-𝗔I\n・───────────・\n';
     const suffix = '\n・──── >ᴗ< ────・';
     const chunks = reply.match(/[\s\S]{1,1900}/g);
 
