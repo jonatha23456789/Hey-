@@ -1,7 +1,7 @@
 const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
 
-const API_KEY = '0bc1e20e-ec47-4c92-a61f-1c626e7edab7';
+const API_KEY = '7ffd8b85-ee5d-4343-bd51-ac7c22783945';
 
 const getImageUrl = async (event, token) => {
   const mid = event?.message?.reply_to?.mid || event?.message?.mid;
@@ -30,7 +30,7 @@ module.exports = {
     const url = await getImageUrl(event, token) || (Date.now() - (cached?.timestamp || 0) < 300000 && cached.url) || '';
 
     try {
-      const res = await axios.get('https://kaiz-apis.gleeze.com/api/gpt4o-mini?ask=Ask&apikey=7ffd8b85-ee5d-4343-bd51-ac7c22783945', {
+      const res = await axios.get('https://kaiz-apis.gleeze.com/api/gpt4o-latest', {
         params: { ask, uid: senderId, imageUrl: url, apikey: API_KEY }
       });
 
