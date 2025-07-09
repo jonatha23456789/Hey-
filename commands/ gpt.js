@@ -30,7 +30,7 @@ module.exports = {
     const url = await getImageUrl(event, token) || (Date.now() - (cached?.timestamp || 0) < 300000 && cached.url) || '';
 
     try {
-      const res = await axios.get('https://kaiz-apis.gleeze.com/api/gpt4o-latest', {
+      const res = await axios.get('https://kaiz-apis.gleeze.com/api/gpt4o-mini?ask=Ask&apikey=7ffd8b85-ee5d-4343-bd51-ac7c22783945', {
         params: { ask, uid: senderId, imageUrl: url, apikey: API_KEY }
       });
 
