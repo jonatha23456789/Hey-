@@ -47,7 +47,7 @@ const MAX_HISTORY = 20;
 const KEEP_RECENT = 12;
 
 module.exports = {
-  name: 'lovely',
+  name: 'ai',
   description: 'Interact with Mocha AI using text queries.',
   usage: 'ask a question, optionally with image',
   author: 'coffee',
@@ -125,7 +125,7 @@ module.exports = {
 
       if (!fullResponseText) throw new Error('Empty response from AI.');
 
-      const formatted = `💬 | 𝙼𝚘𝚌𝚑𝚊 𝙰𝚒\n・───────────・\n${fullResponseText}\n・──── >ᴗ< ────・`;
+      const formatted = ` 🚨 | Anime Focus Ai\n・───────────・\n${fullResponseText}\n・──── >ᴗ< ────・`;
       for (const chunk of chunkMessage(formatted)) {
         await sendMessage(senderId, { text: chunk }, pageAccessToken);
       }
