@@ -1,94 +1,68 @@
 const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
+const fs = require('fs');
+
+const token = fs.readFileSync('token.txt', 'utf8');
 
 module.exports = {
-  name: 'lyricspro',
-  description: 'Search song lyrics with artist image and audio preview',
+  name: 'lyrics',
+  description: 'Search for song lyrics with image and audio',
   author: 'Hk',
-  usage: '-lyricspro <song name>',
+  usage: 'lyrics [song name]',
 
-  async execute(senderId, args, pageAccessToken) {
-    const query = args.join(' ');
+  async execute(senderId, args) {
+    const pageAccessToken = token;
+    const query = args.join(' ').trim();
+
     if (!query) {
-      return sendMessage(
-        senderId,
-        { text: '🎵 Please provide a song name.\nExample: -lyricspro Shape of You' },
-        pageAccessToken
-      );
+      return sendMessage(senderId, { text: '⚠️ Please provide a song name.\nExample: lyricspro Shape of You' }, pageAccessToken);
     }
 
-    const lyricsApi = `https://api-library-kohi.onrender.com/api/lyrics?query=${encodeURIComponent(query)}`;
-    const itunesApi = `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&limit=1`;
-
     try {
-      await sendMessage(senderId, { text: '🎶 Searching lyrics and artist info...' }, pageAccessToken);
+      await sendMessage(senderId, { text: '🎧 Searching for song lyrics...' }, pageAccessToken);
 
-      // Fetch lyrics and iTunes info in parallel
-      const [lyricsRes, itunesRes] = await Promise.all([
-        axios.get(lyricsApi),
-        axios.get(itunesApi)
-      ]);
+      // API call
+      const apiUrl = `https://api-library-kohi.onrender.com/api/lyrics?query=${encodeURIComponent(query)}`;
+      const response = await axios.get(apiUrl);
+      const data = response.data;
 
-      const lyricsData = lyricsRes.data.data;
-      const itunesData = itunesRes.data.results[0];
-
-      if (!lyricsData) {
-        return sendMessage(senderId, { text: `❌ No lyrics found for "${query}".` }, pageAccessToken);
+      if (!data.status || !data.data) {
+        return sendMessage(senderId, { text: '❌ No lyrics found for this song.' }, pageAccessToken);
       }
 
-      const { title, artist, lyrics } = lyricsData;
+      const song = data.data;
 
-      // Artist image or album art (fallback)
-      const cover =
-        itunesData?.artworkUrl100?.replace('100x100', '600x600') ||
-        'https://cdn-icons-png.flaticon.com/512/727/727240.png';
-
-      // Audio preview (if exists)
-      const previewUrl = itunesData?.previewUrl;
-
-      // Send song info card
-      await sendMessage(
-        senderId,
-        {
+      // Image (cover art) — step 1
+      if (song.image) {
+        await sendMessage(senderId, {
           attachment: {
             type: 'image',
-            payload: { url: cover }
+            payload: { url: song.image }
           }
-        },
-        pageAccessToken
-      );
-
-      await sendMessage(
-        senderId,
-        {
-          text: `🎧 *${title}*\n👤 *Artist:* ${artist}\n\n💿 *Album:* ${itunesData?.collectionName || 'Unknown'}\n🌍 *Genre:* ${itunesData?.primaryGenreName || 'Unknown'}\n📅 *Release:* ${itunesData?.releaseDate?.slice(0, 10) || 'N/A'}`,
-        },
-        pageAccessToken
-      );
-
-      if (previewUrl) {
-        await sendMessage(
-          senderId,
-          {
-            attachment: {
-              type: 'audio',
-              payload: { url: previewUrl }
-            }
-          },
-          pageAccessToken
-        );
+        }, pageAccessToken);
       }
 
-      // Split lyrics into parts (Messenger limit)
-      const chunks = lyrics.match(/.{1,1800}/gs) || [];
-      for (let i = 0; i < chunks.length; i++) {
-        const prefix = chunks.length > 1 ? `📄 Part ${i + 1}/${chunks.length}\n\n` : '';
-        await sendMessage(senderId, { text: prefix + chunks[i] }, pageAccessToken);
+      // Lyrics text — step 2
+      const formattedLyrics =
+        `🎵 *${song.title}* - ${song.artist}\n\n` +
+        `${song.lyrics}\n\n` +
+        `🌐 Source: ${song.url || 'Unknown'}`;
+
+      await sendMessage(senderId, { text: formattedLyrics }, pageAccessToken);
+
+      // Audio file — step 3
+      if (song.audio) {
+        await sendMessage(senderId, {
+          attachment: {
+            type: 'audio',
+            payload: { url: song.audio }
+          }
+        }, pageAccessToken);
       }
 
-    } catch (err) {
-      console.error('LyricsPro Command Error:', err.message);
-      sendMessage(senderId, { text: '🚨 Error fetching lyrics or artist data. Try again later.' }, pageAccessToken);
+    } catch (error) {
+      console.error('LyricsPro Command Error:', error.message);
+      await sendMessage(senderId, { text: '🚨 An error occurred while fetching the lyrics. Please try again later.' }, token);
     }
   }
 };
