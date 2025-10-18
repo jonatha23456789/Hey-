@@ -1,80 +1,44 @@
-const axios = require('axios');
-const { sendMessage, deleteMessage } = require('../handles/sendMessage');
+const axios = require("axios");
 
 module.exports = {
-  name: 'loli',
-  description: 'Send a random loli image',
-  author: 'Hk',
-  usage: '-loli',
+  name: "loli",
+  description: "Send a random loli image",
+  author: "Hk",
+  cooldown: 5,
 
-  async execute(senderId, args, pageAccessToken) {
-    let loadingMsgId = null;
+  async execute(event, api) {
+    const { threadID, messageID } = event;
+
+    // Message de chargement
+    const loading = await api.sendMessage("🎀 Fetching a cute random loli...", threadID, messageID);
 
     try {
-      // Envoi du message de chargement
-      const loadingMsg = await sendMessage(
-        senderId,
-        { text: '🎀 Fetching a cute random loli...' },
-        pageAccessToken
-      );
+      // On récupère le lien direct de l'image
+      const res = await axios.get("https://archive.lick.eu.org/api/random/loli", {
+        maxRedirects: 0,
+        validateStatus: (status) => status >= 200 && status < 400,
+      });
 
-      loadingMsgId = loadingMsg?.message_id || null;
-
-      // Requête API
-      const apiUrl = 'https://archive.lick.eu.org/api/random/loli';
-      const response = await axios.get(apiUrl, { responseType: 'json' });
-
-      // Vérifie le contenu reçu
-      let imageUrl;
-
-      if (typeof response.data === 'string') {
-        imageUrl = response.data; // L’API renvoie juste l’URL directe
-      } else if (response.data?.url) {
-        imageUrl = response.data.url;
-      } else if (response.data?.image) {
-        imageUrl = response.data.image;
-      } else {
-        imageUrl = response.request.res.responseUrl || null; // En cas de redirection
-      }
+      // Si l’API redirige vers une image
+      let imageUrl = res.headers.location || res.data.url || res.data || null;
 
       if (!imageUrl) {
-        await sendMessage(
-          senderId,
-          { text: '❌ Failed to fetch loli image.' },
-          pageAccessToken
-        );
-        return;
+        return api.sendMessage("❌ Unable to fetch image.", threadID, messageID);
       }
 
-      // Envoi de l’image
-      await sendMessage(
-        senderId,
+      // Envoi de l'image
+      api.sendMessage(
         {
-          attachment: {
-            type: 'image',
-            payload: { url: imageUrl },
-          },
+          attachment: { type: "photo", payload: { url: imageUrl } },
         },
-        pageAccessToken
+        threadID,
+        () => api.unsendMessage(loading.messageID) // Supprime le message "loading"
       );
 
-      // Supprime le message "loading"
-      if (loadingMsgId) {
-        await deleteMessage(senderId, loadingMsgId, pageAccessToken);
-      }
-
-    } catch (error) {
-      console.error('❌ Loli Command Error:', error.message || error);
-
-      await sendMessage(
-        senderId,
-        { text: '⚠️ An error occurred while fetching the image.' },
-        pageAccessToken
-      );
-
-      if (loadingMsgId) {
-        await deleteMessage(senderId, loadingMsgId, pageAccessToken);
-      }
+    } catch (err) {
+      console.error(err);
+      api.sendMessage("⚠️ Failed to fetch loli image.", threadID, messageID);
+      api.unsendMessage(loading.messageID);
     }
   },
 };
