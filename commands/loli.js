@@ -11,24 +11,31 @@ module.exports = {
     let loadingMsgId = null;
 
     try {
-      // Envoi du message "loading"
+      // Envoi du message de chargement
       const loadingMsg = await sendMessage(
         senderId,
         { text: '🎀 Fetching a cute random loli...' },
         pageAccessToken
       );
 
-      // Récupère l’ID du message envoyé (si disponible)
       loadingMsgId = loadingMsg?.message_id || null;
 
-      // Appel de l’API
+      // Requête API
       const apiUrl = 'https://archive.lick.eu.org/api/random/loli';
-      const { data } = await axios.get(apiUrl);
+      const response = await axios.get(apiUrl, { responseType: 'json' });
 
-      const imageUrl =
-        typeof data === 'string'
-          ? data
-          : data.url || data.image || null;
+      // Vérifie le contenu reçu
+      let imageUrl;
+
+      if (typeof response.data === 'string') {
+        imageUrl = response.data; // L’API renvoie juste l’URL directe
+      } else if (response.data?.url) {
+        imageUrl = response.data.url;
+      } else if (response.data?.image) {
+        imageUrl = response.data.image;
+      } else {
+        imageUrl = response.request.res.responseUrl || null; // En cas de redirection
+      }
 
       if (!imageUrl) {
         await sendMessage(
@@ -39,7 +46,7 @@ module.exports = {
         return;
       }
 
-      // Envoi de l'image
+      // Envoi de l’image
       await sendMessage(
         senderId,
         {
@@ -51,7 +58,7 @@ module.exports = {
         pageAccessToken
       );
 
-      // Supprime le message "loading" après succès
+      // Supprime le message "loading"
       if (loadingMsgId) {
         await deleteMessage(senderId, loadingMsgId, pageAccessToken);
       }
@@ -61,11 +68,10 @@ module.exports = {
 
       await sendMessage(
         senderId,
-        { text: '⚠️ An error occurred while fetching loli image.' },
+        { text: '⚠️ An error occurred while fetching the image.' },
         pageAccessToken
       );
 
-      // Supprime le message "loading" en cas d’erreur
       if (loadingMsgId) {
         await deleteMessage(senderId, loadingMsgId, pageAccessToken);
       }
