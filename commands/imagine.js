@@ -8,7 +8,7 @@ const key = 'b59784be-020d-4a15-bb50-3cfb0f1ae5b0';
 const decode = str => Buffer.from(str, [98,97,115,101,54,52].map(c => String.fromCharCode(c)).join('')).toString();
 
 module.exports = {
-  name: 'imagegen',
+  name: 'imagine',
   description: 'Generate images via prompt using Flux.',
   usage: '-imagine [prompt]',
   author: 'coffee',
