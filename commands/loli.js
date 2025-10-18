@@ -1,44 +1,57 @@
-const axios = require("axios");
+const axios = require('axios');
+const { sendMessage } = require('../handles/sendMessage');
+const fs = require('fs');
+
+const token = fs.readFileSync('token.txt', 'utf8');
 
 module.exports = {
-  name: "loli",
-  description: "Send a random loli image",
-  author: "Hk",
-  cooldown: 5,
+  name: 'loli',
+  description: 'Send 3 random loli images',
+  author: 'Hk',
+  usage: 'loli',
 
-  async execute(event, api) {
-    const { threadID, messageID } = event;
-
-    // Message de chargement
-    const loading = await api.sendMessage("🎀 Fetching a cute random loli...", threadID, messageID);
+  async execute(senderId, args) {
+    const pageAccessToken = token;
 
     try {
-      // On récupère le lien direct de l'image
-      const res = await axios.get("https://archive.lick.eu.org/api/random/loli", {
-        maxRedirects: 0,
-        validateStatus: (status) => status >= 200 && status < 400,
-      });
+      // Message de chargement
+      const loadingMsg = await sendMessage(senderId, { text: '⏳ Chargement de jolies images...' }, pageAccessToken);
 
-      // Si l’API redirige vers une image
-      let imageUrl = res.headers.location || res.data.url || res.data || null;
+      // Fonction pour obtenir une image depuis l'API
+      const getRandomLoli = async () => {
+        const res = await axios.get('https://archive.lick.eu.org/api/random/loli');
+        return res.data.url || res.data.image || res.data;
+      };
 
-      if (!imageUrl) {
-        return api.sendMessage("❌ Unable to fetch image.", threadID, messageID);
+      // Récupération de 3 images en parallèle
+      const images = await Promise.all([getRandomLoli(), getRandomLoli(), getRandomLoli()]);
+
+      // Envoi des images une par une
+      for (const imageUrl of images) {
+        if (!imageUrl) continue;
+        const imageMessage = {
+          attachment: {
+            type: 'image',
+            payload: {
+              url: imageUrl,
+              is_reusable: true,
+            },
+          },
+        };
+        await sendMessage(senderId, imageMessage, pageAccessToken);
       }
 
-      // Envoi de l'image
-      api.sendMessage(
-        {
-          attachment: { type: "photo", payload: { url: imageUrl } },
-        },
-        threadID,
-        () => api.unsendMessage(loading.messageID) // Supprime le message "loading"
-      );
+      // Suppression du message "chargement"
+      if (loadingMsg && loadingMsg.message_id) {
+        await sendMessage(senderId, { text: '', message_id: loadingMsg.message_id }, pageAccessToken);
+      }
 
-    } catch (err) {
-      console.error(err);
-      api.sendMessage("⚠️ Failed to fetch loli image.", threadID, messageID);
-      api.unsendMessage(loading.messageID);
+      // Message final
+      await sendMessage(senderId, { text: '✨ Voici tes images !' }, pageAccessToken);
+
+    } catch (error) {
+      console.error('Erreur:', error.message || error);
+      await sendMessage(senderId, { text: '❌ Une erreur est survenue lors du chargement des images.' }, pageAccessToken);
     }
-  },
+  }
 };
