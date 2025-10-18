@@ -1,6 +1,6 @@
 const axios = require('axios');
-const { sendMessage } = require('../handles/sendMessage');
 const fs = require('fs');
+const { sendMessage } = require('../handles/sendMessage');
 
 const token = fs.readFileSync('token.txt', 'utf8');
 
@@ -14,24 +14,29 @@ module.exports = {
 
     try {
       // Message temporaire
-      const loadingMsg = await sendMessage(senderId, { text: '🕐 Chargement de ton image mignonne...' }, pageAccessToken);
+      await sendMessage(senderId, { text: '🕐 Chargement de ton image mignonne...' }, pageAccessToken);
 
-      // Requête API
-      const res = await axios.get('https://archive.lick.eu.org/api/random/loli');
-      const imageUrl = res.data?.url || res.data?.image || res.data;
+      // Requête API (obtenir le lien direct)
+      const res = await axios.get('https://archive.lick.eu.org/api/random/loli', { responseType: 'arraybuffer' });
 
-      if (!imageUrl) {
-        await sendMessage(senderId, { text: '❌ Impossible de récupérer une image.' }, pageAccessToken);
-        return;
+      // Vérifier si on a bien reçu une image
+      if (!res.data) {
+        return await sendMessage(senderId, { text: '❌ Impossible de récupérer une image.' }, pageAccessToken);
       }
 
-      // Supprimer le message de chargement
-      if (loadingMsg && loadingMsg.message_id) {
-        await sendMessage(senderId, { text: '', message_id: loadingMsg.message_id }, pageAccessToken);
-      }
+      // Envoyer l’image directement sous forme d’attachement
+      const imageBase64 = Buffer.from(res.data).toString('base64');
+      const imageMessage = {
+        attachment: {
+          type: 'image',
+          payload: {
+            is_reusable: true,
+          },
+        },
+        filedata: imageBase64
+      };
 
-      // Envoyer l'image
-      await sendMessage(senderId, { attachment: imageUrl }, pageAccessToken);
+      await sendMessage(senderId, imageMessage, pageAccessToken);
 
     } catch (error) {
       console.error('Erreur Loli:', error.message || error);
