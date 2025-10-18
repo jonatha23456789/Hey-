@@ -2,7 +2,7 @@ const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
-  name: 'animesearch',
+  name: 'anime',
   description: 'Search for anime details by name',
   author: 'Hk',
   usage: '-animesearch <anime name>',
@@ -20,12 +20,12 @@ module.exports = {
     try {
       await sendMessage(senderId, { text: '🔎 Searching for anime...' }, pageAccessToken);
 
-      // --- 1️⃣ ESSAI AVEC JIKAN ---
+      // 🔹 Recherche principale avec Jikan API
       const jikanUrl = `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=1`;
       const jikanRes = await axios.get(jikanUrl);
       const animeData = jikanRes.data.data?.[0];
 
-      // --- 2️⃣ SI RIEN TROUVÉ, ESSAI AVEC ARY CHAUHAN ---
+      // 🔸 Si rien trouvé, fallback vers AryChauhan API
       if (!animeData) {
         const fallbackUrl = `https://arychauhann.onrender.com/api/animeinfo?url=https://myanimelist.net/anime?q=${encodeURIComponent(query)}`;
         const fallbackRes = await axios.get(fallbackUrl);
@@ -33,12 +33,21 @@ module.exports = {
           throw new Error('No anime data found in both APIs.');
         }
         const data = fallbackRes.data;
-        return sendMessage(senderId, {
-          text: `🎬 *${data.title}*\n\n📝 ${data.synopsis}\n\n📺 Type: ${data.information?.type}\n🌟 Score: ${data.statistics?.score}\n🎙️ Studio: ${data.information?.studios}\n🔗 [MyAnimeList Link](${data.link})`,
-        }, pageAccessToken);
+
+        const message = `🎬 *${data.title}*\n\n📝 ${data.synopsis}\n\n📺 Type: ${data.information?.type}\n🌟 Score: ${data.statistics?.score}\n🎙️ Studio: ${data.information?.studios}\n🔗 [MyAnimeList Link](${data.link})`;
+
+        await sendMessage(senderId, { text: message }, pageAccessToken);
+
+        if (data.image) {
+          await sendMessage(senderId, {
+            attachment: { type: 'image', payload: { url: data.image } },
+          }, pageAccessToken);
+        }
+
+        return;
       }
 
-      // --- 3️⃣ FORMATAGE DES DONNÉES JIKAN ---
+      // 🔹 Formatage des données Jikan
       const anime = animeData;
       const title = anime.title || 'Unknown';
       const imageUrl = anime.images?.jpg?.image_url;
@@ -50,20 +59,17 @@ module.exports = {
       const genres = anime.genres?.map(g => g.name).join(', ') || 'N/A';
       const link = anime.url;
 
-      // --- 4️⃣ ENVOI IMAGE ---
-      if (imageUrl) {
-        await sendMessage(senderId, {
-          attachment: {
-            type: 'image',
-            payload: { url: imageUrl },
-          },
-        }, pageAccessToken);
-      }
-
-      // --- 5️⃣ ENVOI DÉTAILS ---
+      // 📝 Envoi du texte d'abord
       const message = `🎬 *${title}*\n\n📺 Type: ${type}\n🎞️ Episodes: ${episodes}\n📊 Score: ${score}\n📅 Status: ${status}\n📚 Genres: ${genres}\n\n📝 Synopsis:\n${synopsis}\n\n🔗 [More Info](${link})`;
 
       await sendMessage(senderId, { text: message }, pageAccessToken);
+
+      // 🖼️ Ensuite l'image
+      if (imageUrl) {
+        await sendMessage(senderId, {
+          attachment: { type: 'image', payload: { url: imageUrl } },
+        }, pageAccessToken);
+      }
 
     } catch (error) {
       console.error('❌ AnimeSearch Error:', error.message || error);
