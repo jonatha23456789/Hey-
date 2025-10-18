@@ -1,73 +1,75 @@
-const axios = require("axios");
-const fs = require("fs");
-const { sendMessage } = require("../handles/sendMessage");
-
-const token = fs.readFileSync("token.txt", "utf8");
+const axios = require('axios');
+const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
-  name: "anime",
-  description: "Search for anime details by name",
-  author: "Hk",
+  name: 'animesearch',
+  description: 'Search for anime details by name',
+  author: 'Hk',
+  usage: '-animesearch <anime name>',
 
-  async execute(senderId, args) {
-    const pageAccessToken = token;
-    const query = args.join(" ").trim();
-
+  async execute(senderId, args, pageAccessToken) {
+    const query = args.join(' ').trim();
     if (!query) {
-      return await sendMessage(
+      return sendMessage(
         senderId,
-        { text: "❗ Please provide an anime name.\nExample: anime Bleach" },
+        { text: '⚠️ Please provide an anime name.\nExample: -animesearch Bleach' },
         pageAccessToken
       );
     }
 
     try {
-      await sendMessage(senderId, { text: "🔍 Searching anime details..." }, pageAccessToken);
+      await sendMessage(senderId, { text: '🔎 Searching for anime...' }, pageAccessToken);
 
-      const apiUrl = `https://kaiz-apis.gleeze.com/api/mal?title=${encodeURIComponent(query)}`;
-      const { data } = await axios.get(apiUrl);
+      // --- 1️⃣ ESSAI AVEC JIKAN ---
+      const jikanUrl = `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=1`;
+      const jikanRes = await axios.get(jikanUrl);
+      const animeData = jikanRes.data.data?.[0];
 
-      if (!data || !data.title) {
-        return await sendMessage(
-          senderId,
-          { text: `❌ No details found for "${query}".` },
-          pageAccessToken
-        );
+      // --- 2️⃣ SI RIEN TROUVÉ, ESSAI AVEC ARY CHAUHAN ---
+      if (!animeData) {
+        const fallbackUrl = `https://arychauhann.onrender.com/api/animeinfo?url=https://myanimelist.net/anime?q=${encodeURIComponent(query)}`;
+        const fallbackRes = await axios.get(fallbackUrl);
+        if (!fallbackRes.data || !fallbackRes.data.title) {
+          throw new Error('No anime data found in both APIs.');
+        }
+        const data = fallbackRes.data;
+        return sendMessage(senderId, {
+          text: `🎬 *${data.title}*\n\n📝 ${data.synopsis}\n\n📺 Type: ${data.information?.type}\n🌟 Score: ${data.statistics?.score}\n🎙️ Studio: ${data.information?.studios}\n🔗 [MyAnimeList Link](${data.link})`,
+        }, pageAccessToken);
       }
 
-      const infoMsg = `🎬 *${data.title}* (${data.japanese || "N/A"})\n\n` +
-        `📺 *Type:* ${data.type || "N/A"}\n` +
-        `📅 *Status:* ${data.status || "N/A"}\n` +
-        `⭐ *Score:* ${data.score || "N/A"} (${data.scoreStats || "no stats"})\n` +
-        `👥 *Popularity:* ${data.popularity || "N/A"}\n` +
-        `🍿 *Aired:* ${data.aired || "N/A"}\n` +
-        `🎙️ *Studios:* ${data.studios || "N/A"}\n` +
-        `📖 *Genres:* ${data.genres || "N/A"}\n\n` +
-        `📝 *Synopsis:*\n${data.description || "No description available."}\n\n` +
-        `🔗 *More info:* ${data.url || "N/A"}`;
+      // --- 3️⃣ FORMATAGE DES DONNÉES JIKAN ---
+      const anime = animeData;
+      const title = anime.title || 'Unknown';
+      const imageUrl = anime.images?.jpg?.image_url;
+      const synopsis = anime.synopsis || 'No synopsis available.';
+      const type = anime.type || 'N/A';
+      const episodes = anime.episodes || 'N/A';
+      const score = anime.score || 'N/A';
+      const status = anime.status || 'N/A';
+      const genres = anime.genres?.map(g => g.name).join(', ') || 'N/A';
+      const link = anime.url;
 
-      // Send anime image
-      await sendMessage(
-        senderId,
-        {
+      // --- 4️⃣ ENVOI IMAGE ---
+      if (imageUrl) {
+        await sendMessage(senderId, {
           attachment: {
-            type: "image",
-            payload: {
-              url: data.picture || "https://i.imgur.com/7s8wWjA.png",
-              is_reusable: true,
-            },
+            type: 'image',
+            payload: { url: imageUrl },
           },
-        },
-        pageAccessToken
-      );
+        }, pageAccessToken);
+      }
 
-      // Send details text
-      await sendMessage(senderId, { text: infoMsg }, pageAccessToken);
+      // --- 5️⃣ ENVOI DÉTAILS ---
+      const message = `🎬 *${title}*\n\n📺 Type: ${type}\n🎞️ Episodes: ${episodes}\n📊 Score: ${score}\n📅 Status: ${status}\n📚 Genres: ${genres}\n\n📝 Synopsis:\n${synopsis}\n\n🔗 [More Info](${link})`;
+
+      await sendMessage(senderId, { text: message }, pageAccessToken);
+
     } catch (error) {
-      console.error("❌ Error fetching anime:", error.message);
+      console.error('❌ AnimeSearch Error:', error.message || error);
       await sendMessage(
         senderId,
-        { text: "⚠️ An error occurred while fetching anime details. Please try again later." },
+        { text: `⚠️ An error occurred while fetching anime details.\n\n🧠 Error: ${error.message}` },
         pageAccessToken
       );
     }
