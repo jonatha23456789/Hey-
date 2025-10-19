@@ -10,22 +10,21 @@ module.exports = {
     if (!args.length) return sendMessage(senderId, { text: "❌ Provide a prompt." }, pageAccessToken);
 
     try {
-      // 1️⃣ Envoie le message de loading et garde l'ID
+      // 1️⃣ Loading message
       const loading = await sendMessage(senderId, { text: "🎨 | Generating your anime image, please wait..." }, pageAccessToken);
 
       const prompt = args.join(" ");
       const res = await axios.get(`https://arychauhann.onrender.com/api/animagine?prompt=${encodeURIComponent(prompt)}`);
 
-      if (!res.data.url) {
-        // Supprime le message loading si échec
+      console.log("API response:", res.data); // 🔍 Debug: voir ce que l'API renvoie
+
+      if (!res.data || !res.data.url) {
         await deleteMessage(loading.messageId, pageAccessToken);
-        return sendMessage(senderId, { text: "❌ No image returned by API." }, pageAccessToken);
+        return sendMessage(senderId, { text: "❌ API did not return an image URL." }, pageAccessToken);
       }
 
-      // 2️⃣ Supprime le message loading
       await deleteMessage(loading.messageId, pageAccessToken);
 
-      // 3️⃣ Envoie l'image avec le texte
       await sendMessage(senderId, {
         body: `✨ Prompt: ${prompt}\n🌟 Credit: Hk`,
         attachment: {
@@ -35,7 +34,7 @@ module.exports = {
       }, pageAccessToken);
 
     } catch (err) {
-      console.error(err);
+      console.error("Error generating image:", err);
       sendMessage(senderId, { text: "❌ Failed to generate image." }, pageAccessToken);
     }
   }
