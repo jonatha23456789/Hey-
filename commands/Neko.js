@@ -3,30 +3,29 @@ const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
   name: 'neko',
-  description: 'Send neko image',
+  description: 'Envoie une image de neko.',
   usage: '-neko',
   author: 'kelvin',
 
   async execute(senderId, args, pageAccessToken) {
-    const apiUrl = 'https://koja-api.web-server.xyz/anime?type=sfw&category=neko';
-
     try {
-      const { data } = await axios.get(apiUrl);
+      // Appel à l'API nekos.life pour obtenir une image de neko
+      const response = await axios.get('https://nekos.life/api/v2/img/neko');
+      const imageUrl = response.data.url;
 
-      if (!data || !data.url) {
-        return sendMessage(senderId, { text: '❌ Failed to fetch neko image.' }, pageAccessToken);
-      }
-
+      // Envoi de l'image à l'utilisateur
       await sendMessage(senderId, {
         attachment: {
           type: 'image',
-          payload: { url: data.url }
+          payload: {
+            url: imageUrl,
+            is_reusable: true
+          }
         }
       }, pageAccessToken);
-
     } catch (error) {
-      console.error('Neko Command Error:', error.message || error);
-      sendMessage(senderId, { text: '❌ An error occurred while fetching neko image.' }, pageAccessToken);
+      console.error('Erreur lors de la récupération de l\'image neko:', error.message);
+      sendMessage(senderId, { text: '❌ Impossible de récupérer une image de neko.' }, pageAccessToken);
     }
   }
 };
