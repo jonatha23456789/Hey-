@@ -7,9 +7,9 @@ module.exports = {
   author: "Hk",
   usage: "waifu",
 
-  async execute(senderId, args) {
+  async execute(senderId, args, pageAccessToken) { // <-- on reçoit le token ici
     try {
-      const loadingMsg = await sendMessage(senderId, { text: "🕐 | Chargement de ta waifu mignonne..." }, token);
+      const loadingMsg = await sendMessage(senderId, { text: "🕐 | Chargement de ta waifu mignonne..." }, pageAccessToken);
 
       const res = await axios.post("https://api.lolicon.app/setu/v2", {
         r18: 0,
@@ -17,14 +17,15 @@ module.exports = {
       });
 
       if (!res.data || !res.data.data || res.data.data.length === 0) {
-        return await sendMessage(senderId, { text: "❌ | Aucune image trouvée, réessaie !" }, token);
+        return await sendMessage(senderId, { text: "❌ | Aucune image trouvée, réessaie !" }, pageAccessToken);
       }
 
       const imageUrl = res.data.data[0].urls.original;
 
-      // Supprimer le message de chargement
+      // Supprimer le message de chargement si possible
+      // (ça dépend si ton projet supporte la suppression, sinon tu peux l'ignorer)
       if (loadingMsg?.message_id) {
-        await sendMessage(senderId, { message_id: loadingMsg.message_id, text: "" }, token);
+        await sendMessage(senderId, { message_id: loadingMsg.message_id, text: "" }, pageAccessToken);
       }
 
       const caption = `
@@ -39,14 +40,14 @@ module.exports = {
           type: "image",
           payload: { url: imageUrl, is_reusable: true }
         }
-      }, token);
+      }, pageAccessToken);
 
       // Envoi du texte après l'image
-      await sendMessage(senderId, { text: caption }, token);
+      await sendMessage(senderId, { text: caption }, pageAccessToken);
 
     } catch (err) {
       console.error(err);
-      await sendMessage(senderId, { text: "❌ | Impossible de récupérer une image depuis l'API." }, token);
+      await sendMessage(senderId, { text: "❌ | Impossible de récupérer une image depuis l'API." }, pageAccessToken);
     }
   }
 };
