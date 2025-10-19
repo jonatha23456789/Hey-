@@ -17,15 +17,15 @@ module.exports = {
     const prompt = args.join(" ");
     if (!prompt) return message.reply("❌ Please provide a prompt.\nExample: imagine Anime girl");
 
-    // Envoyer un message de chargement
-    const loadingMsg = await message.reply("🎨 | Generating your anime image, please wait...");
+    // Message temporaire de chargement
+    await message.reply("🎨 | Generating your anime image, please wait...");
 
     try {
       const response = await axios.get(`https://arychauhann.onrender.com/api/animagine?prompt=${encodeURIComponent(prompt)}`);
       const data = response.data;
 
       if (!data || data.status !== "success" || !data.url) {
-        return loadingMsg.edit("❌ Failed to generate image. Please try again with a different prompt.");
+        return message.reply("❌ Failed to generate image. Try a different prompt.");
       }
 
       const caption = `
@@ -35,15 +35,15 @@ module.exports = {
 🖌 Operator: ${data.operator}
       `.trim();
 
-      // Envoyer l'image avec le message
-      await loadingMsg.edit({
+      // Envoyer l'image directement via l'URL
+      await message.reply({
         body: caption,
         attachment: data.url
       });
 
     } catch (err) {
       console.error(err);
-      await loadingMsg.edit("❌ An error occurred while generating the image. Try again later.");
+      await message.reply("❌ An error occurred while generating the image. Try again later.");
     }
   }
 };
