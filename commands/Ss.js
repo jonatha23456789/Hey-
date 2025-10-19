@@ -2,7 +2,7 @@ const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
-  name: 'screenshot',
+  name: 'ss',
   description: 'Take screenshots of webpages or send images directly',
   usage: '-screenshot <url1> <url2> ...',
   author: 'kelvin',
