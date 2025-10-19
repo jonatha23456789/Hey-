@@ -22,7 +22,7 @@ module.exports = {
     try {
       const { data } = await axios.get(apiUrl);
 
-      if (!data || !data.lyrics) {
+      if (!data || !data.lyrics || !data.artist) {
         return sendMessage(
           senderId,
           { text: '❌ Could not find lyrics for this song.' },
@@ -30,7 +30,7 @@ module.exports = {
         );
       }
 
-      const formattedLyrics = `🎵 *Lyrics for:* ${songTitle}\n\n${data.lyrics}`;
+      const formattedLyrics = `🎵 *Lyrics*\n\n👤 *Artist:* ${data.artist}\n🎶 *Song:* ${data.title || songTitle}\n\n${data.lyrics}`;
 
       // Diviser le texte en plusieurs messages si trop long
       const maxLength = 1900;
