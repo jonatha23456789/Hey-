@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { sendMessage } = require("../handles/sendMessage");
 
 module.exports = {
   name: "imagine",
@@ -6,18 +7,29 @@ module.exports = {
   author: "Hk",
   usage: "-imagine <prompt>",
 
-  async execute(senderId, args, pageAccessToken, event, api) {
+  async execute(senderId, args, pageAccessToken) {
     const prompt = args.join(" ") || "Anime";
 
-    // Message de chargement
-    const loadingMessage = await api.sendMessage(senderId, { text: "🎨 | Generating your anime image, please wait..." }, pageAccessToken);
+    // Envoie le message de chargement
+    const loading = await sendMessage(
+      senderId,
+      { text: "🎨 | Generating your anime image, please wait..." },
+      pageAccessToken
+    );
 
     try {
-      const res = await axios.get(`https://arychauhann.onrender.com/api/animagine?prompt=${encodeURIComponent(prompt)}`);
+      // Appel à l'API
+      const res = await axios.get(
+        `https://arychauhann.onrender.com/api/animagine?prompt=${encodeURIComponent(prompt)}`
+      );
       const data = res.data;
 
       if (!data || data.status !== "success" || !data.url) {
-        return api.sendMessage(senderId, { text: "❌ Failed to generate image." }, pageAccessToken);
+        return sendMessage(
+          senderId,
+          { text: "❌ Failed to generate image." },
+          pageAccessToken
+        );
       }
 
       const caption = `
@@ -27,20 +39,32 @@ module.exports = {
 🌸 Api Credit: Hk
       `.trim();
 
-      // Supprime le message de loading (si possible)
-      if (loadingMessage && loadingMessage.message_id) {
-        await api.unsendMessage(loadingMessage.message_id);
+      // Supprime le message de chargement si possible
+      if (loading && loading.messageID) {
+        await sendMessage(
+          senderId,
+          { text: "", delete: loading.messageID },
+          pageAccessToken
+        );
       }
 
-      // Envoi l'image
-      await api.sendMessage(senderId, {
-        body: caption,
-        attachment: data.url
-      }, pageAccessToken);
+      // Envoie l'image générée
+      await sendMessage(
+        senderId,
+        {
+          body: caption,
+          attachment: data.url
+        },
+        pageAccessToken
+      );
 
     } catch (err) {
       console.error(err);
-      await api.sendMessage(senderId, { text: "❌ Failed to generate image." }, pageAccessToken);
+      await sendMessage(
+        senderId,
+        { text: "❌ Failed to generate image." },
+        pageAccessToken
+      );
     }
   }
 };
