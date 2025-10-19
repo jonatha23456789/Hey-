@@ -1,41 +1,49 @@
 const axios = require("axios");
-const { sendMessage, deleteMessage } = require("../handles/sendMessage");
 
 module.exports = {
-  name: "imagine",
-  description: "Create a beautiful anime image from prompt",
-  author: "Hk",
+  config: {
+    name: "imagine",
+    version: "1.0",
+    author: "Hk",
+    countDown: 5,
+    role: 0,
+    shortDescription: { en: "Create anime image from prompt" },
+    longDescription: { en: "Generates a beautiful anime image using a prompt via API" },
+    category: "fun",
+    guide: { en: "imagine <prompt>" }
+  },
 
-  async execute(senderId, args, pageAccessToken) {
-    if (!args.length) return sendMessage(senderId, { text: "❌ Provide a prompt." }, pageAccessToken);
+  onStart: async function ({ message, args }) {
+    const prompt = args.join(" ");
+    if (!prompt) return message.reply("❌ Please provide a prompt.\nExample: imagine Anime girl");
+
+    // Envoyer un message de chargement
+    const loadingMsg = await message.reply("🎨 | Generating your anime image, please wait...");
 
     try {
-      // 1️⃣ Loading message
-      const loading = await sendMessage(senderId, { text: "🎨 | Generating your anime image, please wait..." }, pageAccessToken);
+      const response = await axios.get(`https://arychauhann.onrender.com/api/animagine?prompt=${encodeURIComponent(prompt)}`);
+      const data = response.data;
 
-      const prompt = args.join(" ");
-      const res = await axios.get(`https://arychauhann.onrender.com/api/animagine?prompt=${encodeURIComponent(prompt)}`);
-
-      console.log("API response:", res.data); // 🔍 Debug: voir ce que l'API renvoie
-
-      if (!res.data || !res.data.url) {
-        await deleteMessage(loading.messageId, pageAccessToken);
-        return sendMessage(senderId, { text: "❌ API did not return an image URL." }, pageAccessToken);
+      if (!data || data.status !== "success" || !data.url) {
+        return loadingMsg.edit("❌ Failed to generate image. Please try again with a different prompt.");
       }
 
-      await deleteMessage(loading.messageId, pageAccessToken);
+      const caption = `
+✨ Your Anime Image is Ready! ✨
 
-      await sendMessage(senderId, {
-        body: `✨ Prompt: ${prompt}\n🌟 Credit: Hk`,
-        attachment: {
-          type: "image",
-          payload: { url: res.data.url }
-        }
-      }, pageAccessToken);
+🎨 Prompt: ${prompt}
+🖌 Operator: ${data.operator}
+      `.trim();
+
+      // Envoyer l'image avec le message
+      await loadingMsg.edit({
+        body: caption,
+        attachment: data.url
+      });
 
     } catch (err) {
-      console.error("Error generating image:", err);
-      sendMessage(senderId, { text: "❌ Failed to generate image." }, pageAccessToken);
+      console.error(err);
+      await loadingMsg.edit("❌ An error occurred while generating the image. Try again later.");
     }
   }
 };
