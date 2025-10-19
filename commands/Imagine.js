@@ -6,16 +6,18 @@ module.exports = {
   author: "Hk",
   usage: "-imagine <prompt>",
 
-  onStart: async function({ message, args }) {
+  async execute(senderId, args, pageAccessToken, event, api) {
     const prompt = args.join(" ") || "Anime";
-    const loading = await message.reply("🎨 | Generating your anime image, please wait...");
+
+    // Message de chargement
+    const loadingMessage = await api.sendMessage(senderId, { text: "🎨 | Generating your anime image, please wait..." }, pageAccessToken);
 
     try {
       const res = await axios.get(`https://arychauhann.onrender.com/api/animagine?prompt=${encodeURIComponent(prompt)}`);
       const data = res.data;
 
       if (!data || data.status !== "success" || !data.url) {
-        return loading.edit("❌ Failed to generate image.");
+        return api.sendMessage(senderId, { text: "❌ Failed to generate image." }, pageAccessToken);
       }
 
       const caption = `
@@ -25,15 +27,20 @@ module.exports = {
 🌸 Api Credit: Hk
       `.trim();
 
-      // Supprime le message loading et envoie l'image
-      loading.delete();
-      message.reply({
+      // Supprime le message de loading (si possible)
+      if (loadingMessage && loadingMessage.message_id) {
+        await api.unsendMessage(loadingMessage.message_id);
+      }
+
+      // Envoi l'image
+      await api.sendMessage(senderId, {
         body: caption,
         attachment: data.url
-      });
+      }, pageAccessToken);
+
     } catch (err) {
       console.error(err);
-      loading.edit("❌ Failed to generate image.");
+      await api.sendMessage(senderId, { text: "❌ Failed to generate image." }, pageAccessToken);
     }
   }
 };
