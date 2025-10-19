@@ -1,49 +1,47 @@
 const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
-const qs = require('qs');
+
+const chunkMessage = (text, max = 1900) => {
+  const chunks = [];
+  for (let i = 0; i < text.length; i += max) {
+    chunks.push(text.slice(i, i + max));
+  }
+  return chunks;
+};
 
 module.exports = {
   name: 'lyrics',
-  description: 'Send lyrics of a song (auto search)',
+  description: 'Send lyrics of a song (auto split for long lyrics)',
   usage: '-lyrics <song name>',
   author: 'kelvin',
 
   async execute(senderId, args, pageAccessToken) {
     if (!args.length) {
-      return sendMessage(senderId, { text: '⚠️ Please provide a song name.\nUsage: -lyrics <song name>' }, pageAccessToken);
+      return sendMessage(
+        senderId,
+        { text: '⚠️ Please provide a song name.\nUsage: -lyrics <song name>' },
+        pageAccessToken
+      );
     }
 
-    const query = args.join(' ');
-    await sendMessage(senderId, { text: `🔎 Searching lyrics for "${query}"...` }, pageAccessToken);
+    const query = encodeURIComponent(args.join(' '));
+    const apiUrl = `https://archive.lick.eu.org/api/search/lyrics?query=${query}`;
 
     try {
-      // Step 1: Try direct search via Delirius API
-      let apiUrl = `https://delirius-apiofc.vercel.app/search/musixmatch?query=${encodeURIComponent(query)}`;
-      let { data } = await axios.get(apiUrl);
+      const { data } = await axios.get(apiUrl);
 
-      // Step 2: If no result, try approximate search via Google API
-      if (!data?.status || !data?.data?.lyrics) {
-        // Simple Google search for song + lyrics (returns first match)
-        const googleUrl = `https://delirius-apiofc.vercel.app/search/musixmatch?query=${encodeURIComponent(query)}`;
-        const googleRes = await axios.get(googleUrl);
-        data = googleRes.data;
-
-        if (!data?.status || !data?.data?.lyrics) {
-          return sendMessage(senderId, { text: `❌ Could not find lyrics for "${query}". Try a simpler song name.` }, pageAccessToken);
-        }
+      if (!data || !data.result || data.result.length === 0) {
+        return sendMessage(
+          senderId,
+          { text: `❌ Could not find lyrics for "${args.join(' ')}".` },
+          pageAccessToken
+        );
       }
 
-      const song = data.data;
+      const song = data.result[0]; // Premier résultat
+      const header = `🎵 *${song.title}* - ${song.artist}\n\n`;
 
-      const message = `🎵 *${song.title}* - ${song.artist}\n\n` +
-                      `Album: ${song.album}\n` +
-                      `🔗 [View on Musixmatch](${song.track_share_url})\n\n` +
-                      `Lyrics:\n${song.lyrics}`;
-
-      // Send lyrics
-      await sendMessage(senderId, { text: message }, pageAccessToken);
-
-      // Send album image if available
+      // Envoi de l'image de l'album si disponible
       if (song.image) {
         await sendMessage(senderId, {
           attachment: {
@@ -53,9 +51,19 @@ module.exports = {
         }, pageAccessToken);
       }
 
+      // Découpage des paroles si trop longues
+      const lyricsChunks = chunkMessage(song.lyrics);
+      for (const chunk of lyricsChunks) {
+        await sendMessage(senderId, { text: header + chunk }, pageAccessToken);
+      }
+
     } catch (error) {
       console.error('Lyrics Command Error:', error.message || error);
-      sendMessage(senderId, { text: '❌ An error occurred while fetching lyrics.' }, pageAccessToken);
+      sendMessage(
+        senderId,
+        { text: '❌ An error occurred while fetching lyrics.' },
+        pageAccessToken
+      );
     }
   }
 };
