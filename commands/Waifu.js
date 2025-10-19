@@ -1,81 +1,73 @@
-const axios = require("axios");
-const fs = require("fs");
+const fs = require("fs-extra");
 const path = require("path");
 const https = require("https");
-const { sendMessage } = require("../handles/sendMessage");
-
-const token = fs.readFileSync("token.txt", "utf8");
+const axios = require("axios");
 
 module.exports = {
-  name: "waifu",
-  description: "Send a cute random waifu image",
-  author: "Hk",
-  usage: "waifu",
+  config: {
+    name: "waifu",
+    version: "1.0",
+    author: "Hk",
+    countDown: 5,
+    role: 0,
+    shortDescription: { en: "Send random waifu pic" },
+    longDescription: { en: "Fetches a random safe (non-R18) waifu image from Lolicon API" },
+    category: "fun",
+    guide: { en: "Use: waifu" }
+  },
 
-  async execute(senderId, args) {
-    const pageAccessToken = token;
-    const loadingMsg = await sendMessage(senderId, { text: "🕐 | Chargement de ta waifu mignonne..." }, pageAccessToken);
+  onStart: async function ({ message }) {
+    // Envoi du message de chargement
+    const loading = await message.reply("🕐 | Chargement de ta waifu mignonne...");
 
     try {
-      const res = await axios.post("https://api.lolicon.app/setu/v2", {
-        r18: 0,
-        num: 1
-      });
-
+      // Récupération des données
+      const res = await axios.post("https://api.lolicon.app/setu/v2", { r18: 0, num: 1 });
       if (!res.data || !res.data.data || res.data.data.length === 0) {
-        return await sendMessage(senderId, { text: "❌ | Aucune image trouvée, réessaie !" }, pageAccessToken);
+        return message.reply("❌ | Aucune image trouvée, réessaie !");
       }
 
-      const imageUrl =
-        res.data.data[0].urls.original ||
-        res.data.data[0].urls.regular ||
-        res.data.data[0].urls.small;
+      const data = res.data.data[0];
+      const imageUrl = data.urls.original || data.urls.regular || data.urls.small;
+      const title = data.title || "Inconnue";
+      const author = data.author || "Inconnu";
+      const ext = data.ext || "jpg";
 
-      // Téléchargement temporaire de l'image
+      // Création du chemin cache
       const cacheDir = path.join(__dirname, "cache");
-      if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir);
-      const filePath = path.join(cacheDir, `waifu_${Date.now()}.jpg`);
+      fs.ensureDirSync(cacheDir);
+      const filePath = path.join(cacheDir, `waifu_${Date.now()}.${ext}`);
 
+      // Téléchargement de l’image
       const file = fs.createWriteStream(filePath);
       https.get(imageUrl, resImg => {
         resImg.pipe(file);
         file.on("finish", async () => {
           file.close();
 
-          // Supprimer le message de chargement
-          if (loadingMsg?.message_id) {
-            await sendMessage(senderId, { message_id: loadingMsg.message_id, text: "" }, pageAccessToken);
+          // Supprime le message "chargement"
+          if (loading && loading.messageID) {
+            message.unsend(loading.messageID);
           }
 
-          const caption = `
-✨ 𝓒𝓾𝓽𝓮 𝓦𝓪𝓲𝓯𝓾 ✨
+          // Envoi de la waifu
+          const caption = `✨ 𝓦𝓪𝓲𝓯𝓾 ✨\n\n🎨 **Titre:** ${title}\n👤 **Artiste:** ${author}\n\n🌸 Api Credit: Hk`;
+          await message.reply({
+            body: caption,
+            attachment: fs.createReadStream(filePath)
+          });
 
-🌸 Api Credit: Hk
-          `.trim();
-
-          await sendMessage(senderId, {
-            attachment: {
-              type: "image",
-              payload: {
-                url: imageUrl,
-                is_reusable: true
-              }
-            }
-          }, pageAccessToken);
-
-          await sendMessage(senderId, { text: caption }, pageAccessToken);
-
-          // Supprime le fichier temporaire après envoi
+          // Nettoyage du cache
           fs.unlinkSync(filePath);
         });
-      }).on("error", async err => {
+      }).on("error", err => {
         console.error(err);
-        await sendMessage(senderId, { text: "❌ | Erreur lors du téléchargement de l'image." }, pageAccessToken);
+        message.reply("❌ | Erreur lors du téléchargement de l'image.");
       });
 
     } catch (err) {
       console.error(err);
-      await sendMessage(senderId, { text: "❌ | Impossible de récupérer une image depuis l'API." }, pageAccessToken);
+      message.reply("⚠️ | Impossible de se connecter à l'API Lolicon.");
     }
   }
 };
