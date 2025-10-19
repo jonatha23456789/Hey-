@@ -1,38 +1,36 @@
 const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
-const fs = require('fs');
-
-const token = fs.readFileSync('token.txt', 'utf8');
 
 module.exports = {
   name: 'lyrics',
-  description: 'Search for song lyrics with image and audio',
-  author: 'Hk',
-  usage: 'lyrics [song name]',
+  description: 'Send lyrics of a song',
+  usage: '-lyrics <song name>',
+  author: 'kelvin',
 
-  async execute(senderId, args) {
-    const pageAccessToken = token;
-    const query = args.join(' ').trim();
-
-    if (!query) {
-      return sendMessage(senderId, { text: '⚠️ Please provide a song name.\nExample: lyricspro Shape of You' }, pageAccessToken);
+  async execute(senderId, args, pageAccessToken) {
+    if (!args.length) {
+      return sendMessage(senderId, { text: '⚠️ Please provide a song name.\nUsage: -lyrics <song name>' }, pageAccessToken);
     }
 
-    try {
-      await sendMessage(senderId, { text: '🎧 Searching for song lyrics...' }, pageAccessToken);
+    const query = encodeURIComponent(args.join(' '));
+    const apiUrl = `https://delirius-apiofc.vercel.app/search/musixmatch?query=${query}`;
 
-      // API call
-      const apiUrl = `https://api-library-kohi.onrender.com/api/lyrics?query=${encodeURIComponent(query)}`;
-      const response = await axios.get(apiUrl);
-      const data = response.data;
+    try {
+      const { data } = await axios.get(apiUrl);
 
       if (!data.status || !data.data) {
-        return sendMessage(senderId, { text: '❌ No lyrics found for this song.' }, pageAccessToken);
+        return sendMessage(senderId, { text: '❌ Could not find lyrics for this song.' }, pageAccessToken);
       }
 
       const song = data.data;
+      const message = `🎵 *${song.title}* - ${song.artist}\n\n` +
+                      `Album: ${song.album}\n` +
+                      `🔗 [View on Musixmatch](${song.track_share_url})\n\n` +
+                      `Lyrics:\n${song.lyrics}`;
 
-      // Image (cover art) — step 1
+      await sendMessage(senderId, { text: message }, pageAccessToken);
+
+      // Optionally send album image
       if (song.image) {
         await sendMessage(senderId, {
           attachment: {
@@ -42,27 +40,9 @@ module.exports = {
         }, pageAccessToken);
       }
 
-      // Lyrics text — step 2
-      const formattedLyrics =
-        `🎵 *${song.title}* - ${song.artist}\n\n` +
-        `${song.lyrics}\n\n` +
-        `🌐 Source: ${song.url || 'Unknown'}`;
-
-      await sendMessage(senderId, { text: formattedLyrics }, pageAccessToken);
-
-      // Audio file — step 3
-      if (song.audio) {
-        await sendMessage(senderId, {
-          attachment: {
-            type: 'audio',
-            payload: { url: song.audio }
-          }
-        }, pageAccessToken);
-      }
-
     } catch (error) {
-      console.error('LyricsPro Command Error:', error.message);
-      await sendMessage(senderId, { text: '🚨 An error occurred while fetching the lyrics. Please try again later.' }, token);
+      console.error('Lyrics Command Error:', error.message || error);
+      sendMessage(senderId, { text: '❌ An error occurred while fetching lyrics.' }, pageAccessToken);
     }
   }
 };
