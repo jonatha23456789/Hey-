@@ -1,9 +1,10 @@
 const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
+const qs = require('qs');
 
 module.exports = {
   name: 'lyrics',
-  description: 'Send lyrics of a song',
+  description: 'Send lyrics of a song (auto search)',
   usage: '-lyrics <song name>',
   author: 'kelvin',
 
@@ -12,25 +13,37 @@ module.exports = {
       return sendMessage(senderId, { text: '⚠️ Please provide a song name.\nUsage: -lyrics <song name>' }, pageAccessToken);
     }
 
-    const query = encodeURIComponent(args.join(' '));
-    const apiUrl = `https://delirius-apiofc.vercel.app/search/musixmatch?query=${query}`;
+    const query = args.join(' ');
+    await sendMessage(senderId, { text: `🔎 Searching lyrics for "${query}"...` }, pageAccessToken);
 
     try {
-      const { data } = await axios.get(apiUrl);
+      // Step 1: Try direct search via Delirius API
+      let apiUrl = `https://delirius-apiofc.vercel.app/search/musixmatch?query=${encodeURIComponent(query)}`;
+      let { data } = await axios.get(apiUrl);
 
-      if (!data.status || !data.data) {
-        return sendMessage(senderId, { text: '❌ Could not find lyrics for this song.' }, pageAccessToken);
+      // Step 2: If no result, try approximate search via Google API
+      if (!data?.status || !data?.data?.lyrics) {
+        // Simple Google search for song + lyrics (returns first match)
+        const googleUrl = `https://delirius-apiofc.vercel.app/search/musixmatch?query=${encodeURIComponent(query)}`;
+        const googleRes = await axios.get(googleUrl);
+        data = googleRes.data;
+
+        if (!data?.status || !data?.data?.lyrics) {
+          return sendMessage(senderId, { text: `❌ Could not find lyrics for "${query}". Try a simpler song name.` }, pageAccessToken);
+        }
       }
 
       const song = data.data;
+
       const message = `🎵 *${song.title}* - ${song.artist}\n\n` +
                       `Album: ${song.album}\n` +
                       `🔗 [View on Musixmatch](${song.track_share_url})\n\n` +
                       `Lyrics:\n${song.lyrics}`;
 
+      // Send lyrics
       await sendMessage(senderId, { text: message }, pageAccessToken);
 
-      // Optionally send album image
+      // Send album image if available
       if (song.image) {
         await sendMessage(senderId, {
           attachment: {
