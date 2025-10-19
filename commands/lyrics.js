@@ -3,7 +3,7 @@ const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
   name: 'lyrics',
-  description: 'Send music lyrics',
+  description: 'Send only the music cover image',
   usage: '-lyrics <song title>',
   author: 'kelvin',
 
@@ -22,31 +22,26 @@ module.exports = {
     try {
       const { data } = await axios.get(apiUrl);
 
-      if (!data || !data.lyrics) {
+      if (!data || !data.image) {
         return sendMessage(
           senderId,
-          { text: '❌ Could not find lyrics for this song.' },
+          { text: '❌ Could not find an image for this song.' },
           pageAccessToken
         );
       }
 
-      const formattedLyrics = `🎵 *Lyrics for:* ${songTitle}\n\n${data.lyrics}`;
-
-      // Diviser le texte en plusieurs messages si trop long
-      const maxLength = 1900;
-      for (let i = 0; i < formattedLyrics.length; i += maxLength) {
-        await sendMessage(
-          senderId,
-          { text: formattedLyrics.slice(i, i + maxLength) },
-          pageAccessToken
-        );
-      }
+      await sendMessage(senderId, {
+        attachment: {
+          type: 'image',
+          payload: { url: data.image, is_reusable: true }
+        }
+      }, pageAccessToken);
 
     } catch (error) {
-      console.error('Lyrics Command Error:', error.message || error);
+      console.error('Lyrics Image Command Error:', error.message || error);
       await sendMessage(
         senderId,
-        { text: '❌ An error occurred while fetching lyrics.' },
+        { text: '❌ An error occurred while fetching the music image.' },
         pageAccessToken
       );
     }
