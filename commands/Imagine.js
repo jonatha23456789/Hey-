@@ -38,7 +38,7 @@ module.exports = {
         // 🔹 Envoi d’abord le message d’information
         await sendMessage(
           senderId,
-          { text: `✨ Image created successfully \n🖼️ Prompt: ${prompt}` },
+          { text: `✨ Image created successfully by Aryan Chauhan AI\n🖼️ Prompt: ${prompt}` },
           pageAccessToken
         );
 
