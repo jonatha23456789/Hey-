@@ -3,61 +3,59 @@ const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
   name: 'imagine',
-  description: 'Create image using Aryan Chauhan AI API.',
-  usage: '-imagine <prompt> [count]',
+  description: 'Create an AI image using Aryan Chauhan API.',
+  usage: '-imagine <prompt>',
   author: 'kelvin',
 
   async execute(senderId, args, pageAccessToken) {
-    if (!args.length) {
+    const prompt = args.join(' ').trim();
+
+    if (!prompt) {
       return sendMessage(
         senderId,
-        { text: '⚠️ Please provide a prompt.\nExample: -imagine anime girl 2' },
+        { text: '⚠️ Please provide a prompt.\nExample: -imagine anime girl' },
         pageAccessToken
       );
     }
 
-    // Analyse du prompt et du nombre d’images
-    const match = args.join(' ').match(/^(.+?)\s*(\d+)?$/);
-    const prompt = match[1].trim();
-    let count = parseInt(match[2]) || 1;
-    count = Math.min(Math.max(count, 1), 5); // Limite : 1 à 5 images max
+    const apiUrl = `https://arychauhann.onrender.com/api/xl?prompt=${encodeURIComponent(prompt)}`;
 
     try {
-      for (let i = 0; i < count; i++) {
-        const apiUrl = `https://arychauhann.onrender.com/api/xl?prompt=${encodeURIComponent(prompt)}`;
-        const { data } = await axios.get(apiUrl);
+      const { data } = await axios.get(apiUrl);
 
-        if (!data || data.status !== 'success' || !data.url) {
-          await sendMessage(
-            senderId,
-            { text: `❌ Failed to generate image for: ${prompt}` },
-            pageAccessToken
-          );
-          continue;
-        }
-
-        // Envoi de l’image
-        await sendMessage(
+      if (!data || data.status !== 'success' || !data.url) {
+        return sendMessage(
           senderId,
-          {
-            attachment: {
-              type: 'image',
-              payload: { url: data.url, is_reusable: true }
-            }
-          },
-          pageAccessToken
-        );
-
-        // Message d’information
-        await sendMessage(
-          senderId,
-          { text: `✨ Image created successfully by anime focus AI\n🖼️ Prompt: ${prompt}` },
+          { text: '❌ Failed to generate image. Please try again later.' },
           pageAccessToken
         );
       }
+
+      // Envoi d'abord du message texte
+      await sendMessage(
+        senderId,
+        { text: `✨ Image successfully created!\n🎨 Prompt: ${prompt}\n👤 Operator: ${data.operator}` },
+        pageAccessToken
+      );
+
+      // Ensuite l'image
+      await sendMessage(
+        senderId,
+        {
+          attachment: {
+            type: 'image',
+            payload: {
+              url: data.url,
+              is_reusable: true
+            }
+          }
+        },
+        pageAccessToken
+      );
+
     } catch (error) {
       console.error('Imagine Command Error:', error.message || error);
-      sendMessage(
+      return sendMessage(
         senderId,
         { text: '🚨 An error occurred while generating the image.' },
         pageAccessToken
