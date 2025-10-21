@@ -22,19 +22,19 @@ module.exports = {
     try {
       const { data } = await axios.get(apiUrl);
 
-      // Détection automatique du champ contenant l’URL de l’image
-      const imageUrl = data?.image_url || data?.url || data?.result || data?.data || null;
+      const imageUrl = data?.image || data?.image_url || data?.url || data?.result || data?.output || null;
 
       if (!imageUrl) {
-        console.error('Invalid API response:', data);
-        return sendMessage(
+        // debug pour voir ce que l'API renvoie
+        await sendMessage(
           senderId,
-          { text: '❌ Failed to generate image — no valid URL returned by the API.' },
+          { text: `❌ No valid image found.\n\n🧩 API response:\n${JSON.stringify(data, null, 2).slice(0, 1800)}` },
           pageAccessToken
         );
+        return;
       }
 
-      // Envoi direct de l’image générée
+      // Envoi direct de l’image
       await sendMessage(
         senderId,
         {
@@ -46,7 +46,7 @@ module.exports = {
         pageAccessToken
       );
 
-      // Envoi d’un petit message de confirmation avec le prompt
+      // Message d’info
       await sendMessage(
         senderId,
         { text: `✨ Prompt used: ${prompt}` },
