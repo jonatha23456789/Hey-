@@ -16,11 +16,10 @@ module.exports = {
       );
     }
 
-    // Analyse du prompt et du nombre d’images
     const match = args.join(' ').match(/^(.+?)\s*(\d+)?$/);
     const prompt = match[1].trim();
     let count = parseInt(match[2]) || 1;
-    count = Math.min(Math.max(count, 1), 5); // Limite : 1 à 5 images max
+    count = Math.min(Math.max(count, 1), 5); // max 5 images
 
     try {
       for (let i = 0; i < count; i++) {
@@ -36,7 +35,14 @@ module.exports = {
           continue;
         }
 
-        // Envoi de l’image
+        // 🔹 Envoi d’abord le message d’information
+        await sendMessage(
+          senderId,
+          { text: `✨ Image created successfully \n🖼️ Prompt: ${prompt}` },
+          pageAccessToken
+        );
+
+        // 🔹 Puis l’image après le texte
         await sendMessage(
           senderId,
           {
@@ -47,21 +53,6 @@ module.exports = {
           },
           pageAccessToken
         );
-
-        // Message d’information
-        await sendMessage(
-          senderId,
-          { text: `✨ Image created successfully by anime focus AI\n🖼️ Prompt: ${prompt}` },
-          pageAccessToken
-        );
       }
     } catch (error) {
       console.error('Imagine Command Error:', error.message || error);
-      sendMessage(
-        senderId,
-        { text: '🚨 An error occurred while generating the image.' },
-        pageAccessToken
-      );
-    }
-  }
-};
