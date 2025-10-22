@@ -18,51 +18,44 @@ module.exports = {
 
     const [emoji1, emoji2] = args;
 
-    // Première API (Delirius)
+    // API principale
     const mainAPI = `https://delirius-apiofc.vercel.app/tools/mixed?emoji1=${encodeURIComponent(
       emoji1
     )}&emoji2=${encodeURIComponent(emoji2)}`;
 
-    // API de secours (emojik)
+    // API de secours
     const backupAPI = `https://emojik.vercel.app/api/mix?emoji1=${encodeURIComponent(
       emoji1
     )}&emoji2=${encodeURIComponent(emoji2)}`;
 
     let imageUrl = null;
-    let source = '';
+    let source = 'Delirius';
 
     try {
-      // 🔹 Tentative avec l'API principale
       const { data } = await axios.get(mainAPI);
-      imageUrl = data?.data?.url || data?.url || null;
-      source = 'Delirius';
-    } catch (err) {
-      console.warn('⚠️ Main API failed, trying backup...');
+      // On vérifie plus en profondeur si une URL existe
+      imageUrl =
+        data?.data?.url ||
+        data?.result?.url ||
+        data?.url ||
+        data?.data ||
+        null;
+    } catch (error) {
+      console.warn('⚠️ Delirius API failed:', error.message);
     }
 
-    // 🔸 Si l'API principale échoue ou ne renvoie rien, on passe à la backup
+    // Si aucune image trouvée via Delirius, passer à l’API backup
     if (!imageUrl) {
       try {
         const { data } = await axios.get(backupAPI);
         imageUrl = data?.url || data?.image || null;
         source = 'EmojiK';
-      } catch (err) {
-        console.error('🚨 Backup API also failed:', err.message);
+      } catch (error) {
+        console.error('🚨 Backup API failed:', error.message);
       }
     }
 
-    // ❌ Si aucune image n’a été trouvée
-    if (!imageUrl) {
-      return sendMessage(
-        senderId,
-        {
-          text: `❌ Failed to mix these emojis.\nPlease try different emojis or try again later.`,
-        },
-        pageAccessToken
-      );
-    }
-
-    // ✅ Envoi du message et de l’image
+    // Toujours envoyer un message avant l’image
     await sendMessage(
       senderId,
       {
@@ -71,18 +64,27 @@ module.exports = {
       pageAccessToken
     );
 
-    await sendMessage(
-      senderId,
-      {
-        attachment: {
-          type: 'image',
-          payload: {
-            url: imageUrl,
-            is_reusable: true,
+    // Si on a une image, on l’envoie
+    if (imageUrl) {
+      await sendMessage(
+        senderId,
+        {
+          attachment: {
+            type: 'image',
+            payload: {
+              url: imageUrl,
+              is_reusable: true,
+            },
           },
         },
-      },
-      pageAccessToken
-    );
+        pageAccessToken
+      );
+    } else {
+      await sendMessage(
+        senderId,
+        { text: '❌ Could not fetch image from both APIs.' },
+        pageAccessToken
+      );
+    }
   },
 };
