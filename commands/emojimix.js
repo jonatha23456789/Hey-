@@ -3,8 +3,8 @@ const { sendMessage } = require("../handles/sendMessage");
 
 module.exports = {
   name: "emojimix",
-  description: "Mix two emojis together into one image.",
-  usage: "-emojimix <emoji1> <emoji2>",
+  description: "Mix two emojis into a single image.",
+  usage: "-emojimix 🤔 😶",
   author: "kelvin",
 
   async execute(senderId, args, pageAccessToken) {
@@ -20,14 +20,14 @@ module.exports = {
 
     const [emoji1, emoji2] = args;
 
-    const apiUrl = `https://haji-mix-api.gleeze.com/api/emojimix?emoji1=${encodeURIComponent(
+    const apiUrl = `https://delirius-apiofc.vercel.app/tools/mixed?emoji1=${encodeURIComponent(
       emoji1
     )}&emoji2=${encodeURIComponent(emoji2)}`;
 
     try {
       const { data } = await axios.get(apiUrl);
 
-      if (!data || !data.status || !data.url) {
+      if (!data || !data.status || !data.data || !data.data.url) {
         return sendMessage(
           senderId,
           { text: "❌ Failed to generate emoji mix image." },
@@ -35,18 +35,18 @@ module.exports = {
         );
       }
 
-      const mixUrl = data.url;
+      const mixUrl = data.data.url;
 
-      // Envoi d’abord du texte d’information
+      // 🔹 Envoi d’un texte explicatif avant l’image
       await sendMessage(
         senderId,
         {
-          text: `✨ Emoji Mix Created!\n\n${emoji1} + ${emoji2} = 🧪\n📡 Source: Haji-Mix`,
+          text: `✨ Emoji Mix Created!\n\n${emoji1} + ${emoji2} = 🧪\n📡 Source: Delirius`,
         },
         pageAccessToken
       );
 
-      // Puis envoi de l’image générée
+      // 🔹 Envoi de l’image
       await sendMessage(
         senderId,
         {
@@ -61,10 +61,10 @@ module.exports = {
         pageAccessToken
       );
     } catch (error) {
-      console.error("EmojiMix Error:", error.message);
+      console.error("EmojiMix Error:", error.message || error);
       sendMessage(
         senderId,
-        { text: "🚨 An error occurred while generating emoji mix." },
+        { text: "🚨 Failed to connect to the emoji mix API." },
         pageAccessToken
       );
     }
