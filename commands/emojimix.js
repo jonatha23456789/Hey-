@@ -19,7 +19,6 @@ module.exports = {
     }
 
     const [emoji1, emoji2] = args;
-
     const apiUrl = `https://delirius-apiofc.vercel.app/tools/mixed?emoji1=${encodeURIComponent(
       emoji1
     )}&emoji2=${encodeURIComponent(emoji2)}`;
@@ -27,17 +26,29 @@ module.exports = {
     try {
       const { data } = await axios.get(apiUrl);
 
+      // Vérifie si l’API renvoie bien une URL valide
       if (!data || !data.status || !data.data || !data.data.url) {
+        console.log("Invalid API response:", data);
         return sendMessage(
           senderId,
-          { text: "❌ Failed to generate emoji mix image." },
+          { text: "❌ Failed to generate emoji mix image. API returned no image." },
           pageAccessToken
         );
       }
 
-      const mixUrl = data.data.url;
+      const imageUrl = data.data.url;
 
-      // 🔹 Envoi d’un texte explicatif avant l’image
+      // Vérifie que l’image existe bien avant l’envoi
+      const check = await axios.head(imageUrl);
+      if (!check.headers["content-type"].startsWith("image")) {
+        return sendMessage(
+          senderId,
+          { text: "❌ The API did not return a valid image file." },
+          pageAccessToken
+        );
+      }
+
+      // Envoi du texte d’abord
       await sendMessage(
         senderId,
         {
@@ -46,14 +57,14 @@ module.exports = {
         pageAccessToken
       );
 
-      // 🔹 Envoi de l’image
+      // Envoi de l’image ensuite
       await sendMessage(
         senderId,
         {
           attachment: {
             type: "image",
             payload: {
-              url: mixUrl,
+              url: imageUrl,
               is_reusable: true,
             },
           },
@@ -61,10 +72,10 @@ module.exports = {
         pageAccessToken
       );
     } catch (error) {
-      console.error("EmojiMix Error:", error.message || error);
-      sendMessage(
+      console.error("EmojiMix Command Error:", error.message || error);
+      return sendMessage(
         senderId,
-        { text: "🚨 Failed to connect to the emoji mix API." },
+        { text: "🚨 An error occurred while generating the emoji mix image." },
         pageAccessToken
       );
     }
