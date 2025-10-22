@@ -22,33 +22,43 @@ module.exports = {
     try {
       const { data } = await axios.get(apiUrl);
 
-      if (!data || !data.status || !data.data?.url) {
+      // Debug : affichage des données reçues (utile si tu veux vérifier dans la console)
+      console.log('EmojiMix API Response:', data);
+
+      const imageUrl =
+        data?.data?.url ||
+        data?.result?.url ||
+        data?.url ||
+        null;
+
+      if (!imageUrl) {
         return sendMessage(
           senderId,
-          { text: '❌ Failed to mix emojis. Please try again later.' },
+          {
+            text: `❌ No valid image found.\n\n🧩 API response:\n${JSON.stringify(data, null, 2)}`
+          },
           pageAccessToken
         );
       }
 
-      // Message texte avant l’image
+      // Message texte avant l'image
       await sendMessage(
         senderId,
         { text: `✨ Emoji Mix Created!\n\n${emoji1} + ${emoji2} = 🧪` },
         pageAccessToken
       );
 
-      // Envoi de l’image
+      // Envoi de l'image
       await sendMessage(
         senderId,
         {
           attachment: {
             type: 'image',
-            payload: { url: data.data.url, is_reusable: true }
+            payload: { url: imageUrl, is_reusable: true }
           }
         },
         pageAccessToken
       );
-
     } catch (error) {
       console.error('EmojiMix Command Error:', error.message || error);
       return sendMessage(
