@@ -1,62 +1,59 @@
-const axios = require('axios');
-const { sendMessage } = require('../handles/sendMessage');
+const axios = require("axios");
+const { sendMessage } = require("../handles/sendMessage");
 
 module.exports = {
-  name: 'emojimix',
-  description: 'Mix two emojis together into one image.',
-  usage: '-emojimix <emoji1> <emoji2>',
-  author: 'kelvin',
+  name: "emojimix",
+  description: "Mix two emojis together into one image.",
+  usage: "-emojimix <emoji1> <emoji2>",
+  author: "kelvin",
 
   async execute(senderId, args, pageAccessToken) {
     if (args.length < 2) {
       return sendMessage(
         senderId,
-        { text: '⚠️ Please provide two emojis.\nExample: -emojimix 🤔 😶' },
+        {
+          text: "⚠️ Please provide two emojis.\nExample: -emojimix 🤔 😶",
+        },
         pageAccessToken
       );
     }
 
     const [emoji1, emoji2] = args;
 
-    const apiUrl = `https://emojik.vercel.app/api/mix?emoji1=${encodeURIComponent(
+    const apiUrl = `https://haji-mix-api.gleeze.com/api/emojimix?emoji1=${encodeURIComponent(
       emoji1
     )}&emoji2=${encodeURIComponent(emoji2)}`;
 
     try {
       const { data } = await axios.get(apiUrl);
 
-      // Vérifie si on a bien une image valide
-      const imageUrl =
-        data?.url ||
-        data?.image ||
-        data?.result ||
-        (typeof data === 'string' && data.includes('http') ? data : null);
-
-      if (!imageUrl) {
+      if (!data || !data.status || !data.url) {
         return sendMessage(
           senderId,
-          { text: '❌ Failed to generate emoji mix image.' },
+          { text: "❌ Failed to generate emoji mix image." },
           pageAccessToken
         );
       }
 
-      // Envoie d’abord la description
+      const mixUrl = data.url;
+
+      // Envoi d’abord du texte d’information
       await sendMessage(
         senderId,
         {
-          text: `✨ Emoji Mix Created!\n\n${emoji1} + ${emoji2} = 🧪\n📡 Source: EmojiK`,
+          text: `✨ Emoji Mix Created!\n\n${emoji1} + ${emoji2} = 🧪\n📡 Source: Haji-Mix`,
         },
         pageAccessToken
       );
 
-      // Puis l’image générée
+      // Puis envoi de l’image générée
       await sendMessage(
         senderId,
         {
           attachment: {
-            type: 'image',
+            type: "image",
             payload: {
-              url: imageUrl,
+              url: mixUrl,
               is_reusable: true,
             },
           },
@@ -64,10 +61,10 @@ module.exports = {
         pageAccessToken
       );
     } catch (error) {
-      console.error('EmojiMix Error:', error.message);
+      console.error("EmojiMix Error:", error.message);
       sendMessage(
         senderId,
-        { text: '🚨 An error occurred while mixing emojis.' },
+        { text: "🚨 An error occurred while generating emoji mix." },
         pageAccessToken
       );
     }
