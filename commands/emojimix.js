@@ -18,54 +18,38 @@ module.exports = {
 
     const [emoji1, emoji2] = args;
 
-    // API principale
-    const mainAPI = `https://delirius-apiofc.vercel.app/tools/mixed?emoji1=${encodeURIComponent(
+    const apiUrl = `https://emojik.vercel.app/api/mix?emoji1=${encodeURIComponent(
       emoji1
     )}&emoji2=${encodeURIComponent(emoji2)}`;
-
-    // API de secours
-    const backupAPI = `https://emojik.vercel.app/api/mix?emoji1=${encodeURIComponent(
-      emoji1
-    )}&emoji2=${encodeURIComponent(emoji2)}`;
-
-    let imageUrl = null;
-    let source = 'Delirius';
 
     try {
-      const { data } = await axios.get(mainAPI);
-      // On vérifie plus en profondeur si une URL existe
-      imageUrl =
-        data?.data?.url ||
-        data?.result?.url ||
+      const { data } = await axios.get(apiUrl);
+
+      // Vérifie si on a bien une image valide
+      const imageUrl =
         data?.url ||
-        data?.data ||
-        null;
-    } catch (error) {
-      console.warn('⚠️ Delirius API failed:', error.message);
-    }
+        data?.image ||
+        data?.result ||
+        (typeof data === 'string' && data.includes('http') ? data : null);
 
-    // Si aucune image trouvée via Delirius, passer à l’API backup
-    if (!imageUrl) {
-      try {
-        const { data } = await axios.get(backupAPI);
-        imageUrl = data?.url || data?.image || null;
-        source = 'EmojiK';
-      } catch (error) {
-        console.error('🚨 Backup API failed:', error.message);
+      if (!imageUrl) {
+        return sendMessage(
+          senderId,
+          { text: '❌ Failed to generate emoji mix image.' },
+          pageAccessToken
+        );
       }
-    }
 
-    // Toujours envoyer un message avant l’image
-    await sendMessage(
-      senderId,
-      {
-        text: `✨ Emoji Mix Created!\n\n${emoji1} + ${emoji2} = 🧪\n📡 Source: ${source}`,
-      },
-      pageAccessToken
-    );
+      // Envoie d’abord la description
+      await sendMessage(
+        senderId,
+        {
+          text: `✨ Emoji Mix Created!\n\n${emoji1} + ${emoji2} = 🧪\n📡 Source: EmojiK`,
+        },
+        pageAccessToken
+      );
 
-    // Si on a une image, on l’envoie
-    if (imageUrl) {
+      // Puis l’image générée
       await sendMessage(
         senderId,
         {
@@ -79,10 +63,11 @@ module.exports = {
         },
         pageAccessToken
       );
-    } else {
-      await sendMessage(
+    } catch (error) {
+      console.error('EmojiMix Error:', error.message);
+      sendMessage(
         senderId,
-        { text: '❌ Could not fetch image from both APIs.' },
+        { text: '🚨 An error occurred while mixing emojis.' },
         pageAccessToken
       );
     }
