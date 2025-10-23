@@ -1,4 +1,7 @@
 const axios = require("axios");
+const fs = require("fs");
+const path = require("path");
+const FormData = require("form-data");
 const { sendMessage } = require("../handles/sendMessage");
 
 module.exports = {
@@ -24,17 +27,40 @@ module.exports = {
     try {
       const { data } = await axios.get(apiUrl);
 
-      if (!data || !data.status || !data.data?.url) {
+      if (!data?.status || !data?.data?.url) {
         return sendMessage(
           senderId,
-          { text: "❌ Failed to generate emoji mix. Please try again later." },
+          { text: "❌ Failed to generate emoji mix image." },
           pageAccessToken
         );
       }
 
       const imageUrl = data.data.url;
 
-      // 🔹 Envoi du texte explicatif d’abord
+      // 🔹 Téléchargement de l’image localement
+      const imgPath = path.join(__dirname, `emojimix_${Date.now()}.png`);
+      const imgResponse = await axios.get(imageUrl, { responseType: "arraybuffer" });
+      fs.writeFileSync(imgPath, imgResponse.data);
+
+      // 🔹 Upload vers Facebook
+      const form = new FormData();
+      form.append(
+        "message",
+        JSON.stringify({
+          attachment: { type: "image", payload: { is_reusable: true } },
+        })
+      );
+      form.append("filedata", fs.createReadStream(imgPath));
+
+      const upload = await axios.post(
+        `https://graph.facebook.com/v23.0/me/message_attachments?access_token=${pageAccessToken}`,
+        form,
+        { headers: form.getHeaders() }
+      );
+
+      const attachmentId = upload.data.attachment_id;
+
+      // 🔹 Envoi du texte d’abord
       await sendMessage(
         senderId,
         {
@@ -43,25 +69,21 @@ module.exports = {
         pageAccessToken
       );
 
-      // 🔹 Envoi ensuite de l’image mixée
-      await sendMessage(
-        senderId,
+      // 🔹 Envoi de l’image mixée ensuite
+      await axios.post(
+        `https://graph.facebook.com/v23.0/me/messages?access_token=${pageAccessToken}`,
         {
-          attachment: {
-            type: "image",
-            payload: {
-              url: imageUrl,
-              is_reusable: true,
-            },
-          },
-        },
-        pageAccessToken
+          recipient: { id: senderId },
+          message: { attachment: { type: "image", payload: { attachment_id: attachmentId } } },
+        }
       );
-    } catch (error) {
-      console.error("EmojiMix Command Error:", error.message);
+
+      fs.unlinkSync(imgPath); // 🧹 Nettoyage du fichier temporaire
+    } catch (err) {
+      console.error("EmojiMix Command Error:", err.message || err);
       await sendMessage(
         senderId,
-        { text: "🚨 An error occurred while generating the emoji mix." },
+        { text: "🚨 An error occurred while generating emoji mix." },
         pageAccessToken
       );
     }
