@@ -3,7 +3,7 @@ const { sendMessage } = require("../handles/sendMessage");
 
 module.exports = {
   name: "emojimix",
-  description: "Mix two emojis into a single image.",
+  description: "Mix two emojis into one.",
   usage: "-emojimix 🤔 😶",
   author: "kelvin",
 
@@ -11,9 +11,7 @@ module.exports = {
     if (args.length < 2) {
       return sendMessage(
         senderId,
-        {
-          text: "⚠️ Please provide two emojis.\nExample: -emojimix 🤔 😶",
-        },
+        { text: "⚠️ Please provide two emojis.\nExample: -emojimix 😍 🤯" },
         pageAccessToken
       );
     }
@@ -26,38 +24,26 @@ module.exports = {
     try {
       const { data } = await axios.get(apiUrl);
 
-      // Vérifie si l’API renvoie bien une URL valide
-      if (!data || !data.status || !data.data || !data.data.url) {
-        console.log("Invalid API response:", data);
+      if (!data || !data.status || !data.data?.url) {
         return sendMessage(
           senderId,
-          { text: "❌ Failed to generate emoji mix image. API returned no image." },
+          { text: "❌ Failed to generate emoji mix. Please try again later." },
           pageAccessToken
         );
       }
 
       const imageUrl = data.data.url;
 
-      // Vérifie que l’image existe bien avant l’envoi
-      const check = await axios.head(imageUrl);
-      if (!check.headers["content-type"].startsWith("image")) {
-        return sendMessage(
-          senderId,
-          { text: "❌ The API did not return a valid image file." },
-          pageAccessToken
-        );
-      }
-
-      // Envoi du texte d’abord
+      // 🔹 Envoi du texte explicatif d’abord
       await sendMessage(
         senderId,
         {
-          text: `✨ Emoji Mix Created!\n\n${emoji1} + ${emoji2} = 🧪\n📡 Source: Delirius`,
+          text: `✨ *Emoji Mix Created!*\n\n${emoji1} + ${emoji2} = 🧪\n📡 Source: Delirius`,
         },
         pageAccessToken
       );
 
-      // Envoi de l’image ensuite
+      // 🔹 Envoi ensuite de l’image mixée
       await sendMessage(
         senderId,
         {
@@ -72,10 +58,10 @@ module.exports = {
         pageAccessToken
       );
     } catch (error) {
-      console.error("EmojiMix Command Error:", error.message || error);
-      return sendMessage(
+      console.error("EmojiMix Command Error:", error.message);
+      await sendMessage(
         senderId,
-        { text: "🚨 An error occurred while generating the emoji mix image." },
+        { text: "🚨 An error occurred while generating the emoji mix." },
         pageAccessToken
       );
     }
