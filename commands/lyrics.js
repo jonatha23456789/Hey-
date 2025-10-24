@@ -22,7 +22,7 @@ module.exports = {
     try {
       const { data } = await axios.get(apiUrl);
 
-      if (!data || !data.status || !data.result) {
+      if (!data?.status || !data?.data?.response) {
         return sendMessage(
           senderId,
           { text: '❌ Could not find lyrics for this song.' },
@@ -30,26 +30,30 @@ module.exports = {
         );
       }
 
-      const { title, artist, lyrics, thumbnail } = data.result;
+      const song = data.data.response;
+      const artist = song.artist || 'Unknown Artist';
+      const title = song.title || songTitle;
+      const artwork = song.image || null;
+      const lyrics = song.lyrics || 'No lyrics found.';
 
-      // Envoi de l’image de la musique (thumbnail)
-      if (thumbnail) {
+      // 🖼️ Envoie d’abord le visuel de l’album
+      if (artwork) {
         await sendMessage(
           senderId,
           {
             attachment: {
               type: 'image',
-              payload: { url: thumbnail, is_reusable: true },
-            },
+              payload: { url: artwork, is_reusable: true }
+            }
           },
           pageAccessToken
         );
       }
 
-      // Texte bien formaté
-      const formattedLyrics = `🎵 *Lyrics Info*\n\n👤 *Artist:* ${artist || 'Unknown'}\n🎶 *Song:* ${title || songTitle}\n\n${lyrics || 'No lyrics found.'}`;
+      // 🎵 Message stylisé
+      const formattedLyrics = `🎶 *${title}* by *${artist}*\n\n${lyrics}\n\n🔗 [View on Genius](${song.url})`;
 
-      // Découper si texte trop long
+      // ✂️ Coupe le texte s’il est trop long
       const maxLength = 1900;
       for (let i = 0; i < formattedLyrics.length; i += maxLength) {
         await sendMessage(
@@ -63,9 +67,9 @@ module.exports = {
       console.error('Lyrics Command Error:', error.message || error);
       await sendMessage(
         senderId,
-        { text: '🚨 An error occurred while fetching lyrics.' },
+        { text: '❌ An error occurred while fetching lyrics.' },
         pageAccessToken
       );
     }
-  },
+  }
 };
