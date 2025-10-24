@@ -17,12 +17,12 @@ module.exports = {
       );
     }
 
-    const apiUrl = `https://lyricstx.vercel.app/musixmatch/lyrics?title=${encodeURIComponent(songTitle)}`;
+    const apiUrl = `https://miko-utilis.vercel.app/api/lyrics?song=${encodeURIComponent(songTitle)}`;
 
     try {
       const { data } = await axios.get(apiUrl);
 
-      if (!data || !data.lyrics) {
+      if (!data || !data.status || !data.result) {
         return sendMessage(
           senderId,
           { text: '❌ Could not find lyrics for this song.' },
@@ -30,29 +30,26 @@ module.exports = {
         );
       }
 
-      const artist = data.artist_name || 'Unknown';
-      const title = data.track_name || songTitle;
-      const artwork = data.artwork_url || null;
-      const lyrics = data.lyrics;
+      const { title, artist, lyrics, thumbnail } = data.result;
 
-      // Envoyer l'image de l'album si disponible
-      if (artwork) {
+      // Envoi de l’image de la musique (thumbnail)
+      if (thumbnail) {
         await sendMessage(
           senderId,
           {
             attachment: {
               type: 'image',
-              payload: { url: artwork, is_reusable: true }
-            }
+              payload: { url: thumbnail, is_reusable: true },
+            },
           },
           pageAccessToken
         );
       }
 
-      // Texte formaté stylé
-      const formattedLyrics = `🎵 *Lyrics*\n\n👤 *Artist:* ${artist}\n🎶 *Song:* ${title}\n\n${lyrics}`;
+      // Texte bien formaté
+      const formattedLyrics = `🎵 *Lyrics Info*\n\n👤 *Artist:* ${artist || 'Unknown'}\n🎶 *Song:* ${title || songTitle}\n\n${lyrics || 'No lyrics found.'}`;
 
-      // Découper en plusieurs messages si trop long
+      // Découper si texte trop long
       const maxLength = 1900;
       for (let i = 0; i < formattedLyrics.length; i += maxLength) {
         await sendMessage(
@@ -66,9 +63,9 @@ module.exports = {
       console.error('Lyrics Command Error:', error.message || error);
       await sendMessage(
         senderId,
-        { text: '❌ An error occurred while fetching lyrics.' },
+        { text: '🚨 An error occurred while fetching lyrics.' },
         pageAccessToken
       );
     }
-  }
+  },
 };
