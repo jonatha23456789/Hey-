@@ -1,24 +1,36 @@
 const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
 
-// Fonction pour nettoyer les paroles
+// Fonction pour nettoyer et styliser les lyrics
 function cleanLyrics(text) {
   if (!text) return '❌ No lyrics available.';
 
-  return text
-    // Supprime les mentions inutiles
-    .replace(/^\d+\s*Contributors?.*/gi, '') // Ex: "30 Contributors..."
-    .replace(/Translations.*/gi, '') // Ex: "TranslationsDeutsch..."
+  let cleaned = text
+    // Supprime les parties inutiles (contributors, traductions, etc.)
+    .replace(/^\d+\s*Contributors?.*/gim, '')
+    .replace(/Translations.*?(?=\[|$)/gims, '')
+    .replace(/(Lyrics\s*)+/gi, '')
     .replace(/Deutsch|Français|Українська|हिन्दी|Português|English/gi, '')
-    .replace(/\bLyrics\b/gi, '') // Supprime juste "Lyrics" isolé
-    .replace(/\s{2,}/g, ' ') // Supprime les espaces multiples
-    .replace(/\n{3,}/g, '\n\n') // Réduit les grands sauts de ligne
+    .replace(/\b[A-Z ]{3,} Lyrics\b/g, '') // Supprime "MISTAKE Lyrics" ou équivalents
+    .replace(/\s{2,}/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
+
+  // Ajoute de la couleur avec emoji selon les sections
+  cleaned = cleaned
+    .replace(/\[Chorus\]/gi, '🟦 [Chorus]')
+    .replace(/\[Verse\s*\d*\]/gi, '🟩 $&')
+    .replace(/\[Bridge\]/gi, '🟧 [Bridge]')
+    .replace(/\[Outro\]/gi, '🟥 [Outro]')
+    .replace(/\[Intro\]/gi, '🟨 [Intro]')
+    .replace(/\[Pre-Chorus\]/gi, '🟪 [Pre-Chorus]');
+
+  return cleaned;
 }
 
 module.exports = {
   name: 'lyrics',
-  description: 'Send clean music lyrics with artist, song and source',
+  description: 'Send clean music lyrics with artist, song and artwork',
   usage: '-lyrics <song title>',
   author: 'kelvin',
 
@@ -47,10 +59,9 @@ module.exports = {
 
       const { title, artist, image, lyrics, url } = data.data.response;
 
-      // Nettoyage du texte
       const cleanText = cleanLyrics(lyrics);
 
-      // Envoi de l’image si disponible
+      // Envoi de l’image de la chanson si disponible
       if (image) {
         await sendMessage(
           senderId,
@@ -64,15 +75,14 @@ module.exports = {
         );
       }
 
-      // Format stylé et clair
-      const header = `👤 *Artist:* ${artist}\n🎶 *Song:* ${title}\n🌐 *Source:* [View on Genius](${url})\n\n${cleanText}`;
+      // Envoi du texte bien formaté
+      const formatted = `🎵 *Lyrics Found!*\n\n👤 *Artist:* ${artist}\n🎶 *Song:* ${title}\n🌐 *Source:* [View on Genius](${url})\n\n${cleanText}`;
 
-      // Découper si trop long
       const maxLength = 1900;
-      for (let i = 0; i < header.length; i += maxLength) {
+      for (let i = 0; i < formatted.length; i += maxLength) {
         await sendMessage(
           senderId,
-          { text: header.slice(i, i + maxLength) },
+          { text: formatted.slice(i, i + maxLength) },
           pageAccessToken
         );
       }
