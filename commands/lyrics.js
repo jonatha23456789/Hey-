@@ -3,7 +3,7 @@ const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
   name: 'lyrics',
-  description: 'Send music lyrics with artist, song and artwork',
+  description: 'Send music lyrics with artist, title, artwork and link',
   usage: '-lyrics <song title>',
   author: 'kelvin',
 
@@ -30,35 +30,31 @@ module.exports = {
         );
       }
 
-      const song = data.data.response;
-      const artist = song.artist || 'Unknown Artist';
-      const title = song.title || songTitle;
-      const artwork = song.image || null;
-      const lyrics = song.lyrics || 'No lyrics found.';
+      const { title, artist, image, lyrics, url } = data.data.response;
 
-      // 🖼️ Envoie d’abord le visuel de l’album
-      if (artwork) {
+      // 🖼️ Envoi de l'image d'abord
+      if (image) {
         await sendMessage(
           senderId,
           {
             attachment: {
               type: 'image',
-              payload: { url: artwork, is_reusable: true }
+              payload: { url: image, is_reusable: true }
             }
           },
           pageAccessToken
         );
       }
 
-      // 🎵 Message stylisé
-      const formattedLyrics = `🎶 *${title}* by *${artist}*\n\n${lyrics}\n\n🔗 [View on Genius](${song.url})`;
+      // 🎶 Format du texte
+      const formatted = `🎵 *Lyrics Found!*\n\n👤 *Artist:* ${artist}\n🎶 *Song:* ${title}\n🌐 *Source:* [View on Genius](${url})\n\n${lyrics}`;
 
-      // ✂️ Coupe le texte s’il est trop long
+      // Découper en plusieurs messages si trop long
       const maxLength = 1900;
-      for (let i = 0; i < formattedLyrics.length; i += maxLength) {
+      for (let i = 0; i < formatted.length; i += maxLength) {
         await sendMessage(
           senderId,
-          { text: formattedLyrics.slice(i, i + maxLength) },
+          { text: formatted.slice(i, i + maxLength) },
           pageAccessToken
         );
       }
@@ -67,7 +63,7 @@ module.exports = {
       console.error('Lyrics Command Error:', error.message || error);
       await sendMessage(
         senderId,
-        { text: '❌ An error occurred while fetching lyrics.' },
+        { text: '🚨 An error occurred while fetching lyrics.' },
         pageAccessToken
       );
     }
