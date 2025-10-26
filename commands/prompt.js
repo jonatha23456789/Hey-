@@ -9,7 +9,6 @@ module.exports = {
 
   async execute(senderId, args, pageAccessToken, repliedMessage) {
     try {
-      // Vérifie si on a bien reply à quelque chose
       if (!repliedMessage) {
         return sendMessage(
           senderId,
@@ -18,29 +17,37 @@ module.exports = {
         );
       }
 
-      // Cherche l'image dans différents chemins possibles
       let imageUrl = null;
 
-      if (repliedMessage.attachments && repliedMessage.attachments.length > 0) {
-        const attachment = repliedMessage.attachments.find(att => att.type === 'image');
-        if (attachment) imageUrl = attachment.payload.url;
+      // ✅ Si c’est un reply sans pièce jointe directe, on va chercher l’image d’origine
+      if (
+        repliedMessage.message &&
+        repliedMessage.message.reply_to &&
+        repliedMessage.message.reply_to.mid
+      ) {
+        const replyMid = repliedMessage.message.reply_to.mid;
+        const graphUrl = `https://graph.facebook.com/v17.0/${replyMid}?fields=attachments&access_token=${pageAccessToken}`;
+
+        const { data: messageData } = await axios.get(graphUrl);
+
+        if (
+          messageData &&
+          messageData.attachments &&
+          messageData.attachments.data &&
+          messageData.attachments.data.length > 0
+        ) {
+          const attachment = messageData.attachments.data.find(
+            (att) => att.mime_type && att.mime_type.startsWith('image/')
+          );
+          if (attachment && attachment.image_data && attachment.image_data.url) {
+            imageUrl = attachment.image_data.url;
+          } else if (attachment && attachment.payload && attachment.payload.url) {
+            imageUrl = attachment.payload.url;
+          }
+        }
       }
 
-      // Si l'image est dans repliedMessage.message
-      if (!imageUrl && repliedMessage.message?.attachments?.length > 0) {
-        const attachment = repliedMessage.message.attachments.find(att => att.type === 'image');
-        if (attachment) imageUrl = attachment.payload.url;
-      }
-
-      // Si l'image est dans repliedMessage.reply_to
-      if (!imageUrl && repliedMessage.reply_to?.attachments?.length > 0) {
-        const attachment = repliedMessage.reply_to.attachments.find(att => att.type === 'image');
-        if (attachment) imageUrl = attachment.payload.url;
-      }
-
-      // Si aucune image n'est trouvée
       if (!imageUrl) {
-        console.log('No image found in repliedMessage:', JSON.stringify(repliedMessage, null, 2));
         return sendMessage(
           senderId,
           { text: '⚠️ Please reply to an image to generate a prompt.' },
@@ -48,7 +55,7 @@ module.exports = {
         );
       }
 
-      // Appel API
+      // 🔥 Appel API externe
       const apiUrl = `https://nova-apis.onrender.com/prompt?image=${encodeURIComponent(imageUrl)}`;
       const { data } = await axios.get(apiUrl);
 
@@ -60,22 +67,18 @@ module.exports = {
         );
       }
 
-      // Envoie le prompt formaté
       await sendMessage(
         senderId,
-        {
-          text: `🖼️ *Prompt Generated Successfully!*\n\n${data.prompt}`,
-        },
+        { text: `🖼️ *Prompt Generated Successfully!*\n\n${data.prompt}` },
         pageAccessToken
       );
-
     } catch (error) {
-      console.error('Prompt Command Error:', error);
+      console.error('Prompt Command Error:', error.response?.data || error.message);
       await sendMessage(
         senderId,
         { text: '❌ An error occurred while generating the prompt.' },
         pageAccessToken
       );
     }
-  }
+  },
 };
