@@ -1,9 +1,21 @@
 const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
 
+// Fonction pour nettoyer les paroles
+function cleanLyrics(text) {
+  if (!text) return '❌ No lyrics available.';
+  return text
+    .replace(/Translations.*/gi, '') // retire les sections "Translations..."
+    .replace(/Deutsch|Français|Українська|हिन्दी.*|Português|English/gi, '')
+    .replace(/Contributors.*/gi, '')
+    .replace(/Lyrics\s*$/gi, '') // retire le mot "Lyrics" à la fin du titre
+    .replace(/\n{3,}/g, '\n\n') // supprime les multiples sauts de ligne
+    .trim();
+}
+
 module.exports = {
   name: 'lyrics',
-  description: 'Send music lyrics with artist, title, artwork and link',
+  description: 'Send clean music lyrics with artist, song and source',
   usage: '-lyrics <song title>',
   author: 'kelvin',
 
@@ -32,7 +44,10 @@ module.exports = {
 
       const { title, artist, image, lyrics, url } = data.data.response;
 
-      // 🖼️ Envoi de l'image d'abord
+      // Nettoyage du texte des paroles
+      const cleanText = cleanLyrics(lyrics);
+
+      // Envoi de l’image si disponible
       if (image) {
         await sendMessage(
           senderId,
@@ -46,15 +61,15 @@ module.exports = {
         );
       }
 
-      // 🎶 Format du texte
-      const formatted = `🎵 *Lyrics Found!*\n\n👤 *Artist:* ${artist}\n🎶 *Song:* ${title}\n🌐 *Source:* [View on Genius](${url})\n\n${lyrics}`;
+      // Format stylé
+      const header = `👤 *Artist:* ${artist}\n🎶 *Song:* ${title}\n🌐 *Source:* [View on Genius](${url})\n\n${cleanText}`;
 
       // Découper en plusieurs messages si trop long
       const maxLength = 1900;
-      for (let i = 0; i < formatted.length; i += maxLength) {
+      for (let i = 0; i < header.length; i += maxLength) {
         await sendMessage(
           senderId,
-          { text: formatted.slice(i, i + maxLength) },
+          { text: header.slice(i, i + maxLength) },
           pageAccessToken
         );
       }
