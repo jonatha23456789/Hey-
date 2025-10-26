@@ -4,12 +4,15 @@ const { sendMessage } = require('../handles/sendMessage');
 // Fonction pour nettoyer les paroles
 function cleanLyrics(text) {
   if (!text) return '❌ No lyrics available.';
+
   return text
-    .replace(/Translations.*/gi, '') // retire les sections "Translations..."
-    .replace(/Deutsch|Français|Українська|हिन्दी.*|Português|English/gi, '')
-    .replace(/Contributors.*/gi, '')
-    .replace(/Lyrics\s*$/gi, '') // retire le mot "Lyrics" à la fin du titre
-    .replace(/\n{3,}/g, '\n\n') // supprime les multiples sauts de ligne
+    // Supprime les mentions inutiles
+    .replace(/^\d+\s*Contributors?.*/gi, '') // Ex: "30 Contributors..."
+    .replace(/Translations.*/gi, '') // Ex: "TranslationsDeutsch..."
+    .replace(/Deutsch|Français|Українська|हिन्दी|Português|English/gi, '')
+    .replace(/\bLyrics\b/gi, '') // Supprime juste "Lyrics" isolé
+    .replace(/\s{2,}/g, ' ') // Supprime les espaces multiples
+    .replace(/\n{3,}/g, '\n\n') // Réduit les grands sauts de ligne
     .trim();
 }
 
@@ -44,7 +47,7 @@ module.exports = {
 
       const { title, artist, image, lyrics, url } = data.data.response;
 
-      // Nettoyage du texte des paroles
+      // Nettoyage du texte
       const cleanText = cleanLyrics(lyrics);
 
       // Envoi de l’image si disponible
@@ -61,10 +64,10 @@ module.exports = {
         );
       }
 
-      // Format stylé
+      // Format stylé et clair
       const header = `👤 *Artist:* ${artist}\n🎶 *Song:* ${title}\n🌐 *Source:* [View on Genius](${url})\n\n${cleanText}`;
 
-      // Découper en plusieurs messages si trop long
+      // Découper si trop long
       const maxLength = 1900;
       for (let i = 0; i < header.length; i += maxLength) {
         await sendMessage(
