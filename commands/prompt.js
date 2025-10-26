@@ -8,34 +8,40 @@ module.exports = {
   author: 'kelvin',
 
   async execute(senderId, args, pageAccessToken, repliedMessage) {
+    // Vérifier si un message a été replyé
+    if (!repliedMessage) {
+      return sendMessage(
+        senderId,
+        { text: '⚠️ Please reply to an image to generate a prompt.' },
+        pageAccessToken
+      );
+    }
+
+    // Récupérer l'URL de l'image dans différents chemins possibles
+    let imageUrl = null;
     try {
-      if (!repliedMessage || !repliedMessage.attachments || repliedMessage.attachments.length === 0) {
-        return sendMessage(
-          senderId,
-          { text: '⚠️ Please reply to an image to generate a prompt.' },
-          pageAccessToken
-        );
+      if (repliedMessage.attachments && repliedMessage.attachments[0]?.type === 'image') {
+        imageUrl = repliedMessage.attachments[0].payload.url;
+      } else if (repliedMessage.message?.attachments && repliedMessage.message.attachments[0]?.type === 'image') {
+        imageUrl = repliedMessage.message.attachments[0].payload.url;
       }
+    } catch (err) {
+      console.error('Error reading image URL:', err);
+    }
 
-      // Récupération de l'URL de l'image
-      let imageUrl = null;
-      const attachment = repliedMessage.attachments[0];
+    if (!imageUrl) {
+      return sendMessage(
+        senderId,
+        { text: '⚠️ Please reply to an image to generate a prompt.' },
+        pageAccessToken
+      );
+    }
 
-      if (attachment.payload?.url) imageUrl = attachment.payload.url;
-      else if (attachment.image_url) imageUrl = attachment.image_url;
-      else if (attachment.payload?.attachments?.[0]?.url) imageUrl = attachment.payload.attachments[0].url;
+    // Appel à l'API
+    const apiUrl = `https://nova-apis.onrender.com/prompt?image=${encodeURIComponent(imageUrl)}`;
 
-      if (!imageUrl) {
-        return sendMessage(
-          senderId,
-          { text: '⚠️ Could not detect an image in the replied message.' },
-          pageAccessToken
-        );
-      }
-
-      const apiUrl = `https://nova-apis.onrender.com/prompt?image=${encodeURIComponent(imageUrl)}`;
+    try {
       const { data } = await axios.get(apiUrl);
-
       if (!data || !data.prompt) {
         return sendMessage(
           senderId,
@@ -44,9 +50,10 @@ module.exports = {
         );
       }
 
+      // Envoyer le prompt généré
       await sendMessage(
         senderId,
-        { text: `✨ Generated Prompt:\n\n${data.prompt}` },
+        { text: `🖼️ Prompt Generated:\n\n${data.prompt}` },
         pageAccessToken
       );
 
@@ -54,7 +61,7 @@ module.exports = {
       console.error('Prompt Command Error:', error.message || error);
       await sendMessage(
         senderId,
-        { text: '🚨 An error occurred while generating the prompt.' },
+        { text: '❌ An error occurred while generating the prompt.' },
         pageAccessToken
       );
     }
