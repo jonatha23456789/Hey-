@@ -1,38 +1,39 @@
 const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
 
-// Fonction pour nettoyer et formater joliment les paroles
+// Fonction pour nettoyer et formater les lyrics
 function cleanLyrics(text) {
   if (!text) return '❌ No lyrics available.';
 
   let cleaned = text
+    // Supprime les parties inutiles
     .replace(/^\d+\s*Contributors?.*/gim, '')
     .replace(/Translations.*?(?=\[|$)/gims, '')
     .replace(/(Lyrics\s*)+/gi, '')
     .replace(/Deutsch|Français|Українська|हिन्दी|Português|English/gi, '')
     .replace(/\b[A-Z ]{3,} Lyrics\b/g, '')
-    .replace(/\s{2,}/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
+    .replace(/\s{2,}/g, ' ')
     .trim();
 
-  // Ajoute les emojis + saut de ligne avant chaque section
+  // Supprime les doubles sauts de ligne inutiles
+  cleaned = cleaned.replace(/\n{2,}/g, '\n');
+
+  // Coloration + titres stylés
   cleaned = cleaned
-    .replace(/\[Intro\]/gi, '\n\n🟨 [Intro]\n')
-    .replace(/\[Chorus\]/gi, '\n\n🟦 [Chorus]\n')
-    .replace(/\[Verse\s*\d*\]/gi, '\n\n🟩 $&\n')
-    .replace(/\[Bridge\]/gi, '\n\n🟧 [Bridge]\n')
-    .replace(/\[Pre-Chorus\]/gi, '\n\n🟪 [Pre-Chorus]\n')
-    .replace(/\[Outro\]/gi, '\n\n🟥 [Outro]\n');
+    .replace(/\[Intro\]/gi, '🟨 [Intro]')
+    .replace(/\[Verse\s*\d*\]/gi, '🟩 $&')
+    .replace(/\[Pre-Chorus\]/gi, '🟪 [Pre-Chorus]')
+    .replace(/\[Chorus\]/gi, '🟦 [Chorus]')
+    .replace(/\[Bridge\]/gi, '🟧 [Bridge]')
+    .replace(/\[Outro\]/gi, '🟥 [Outro]');
 
-  // Ajoute un espace entre les lignes pour plus de lisibilité
-  cleaned = cleaned.replace(/\n/g, '\n\n');
-
-  return cleaned.trim();
+  return cleaned;
 }
 
 module.exports = {
   name: 'lyrics',
-  description: 'Send clean music lyrics with artist, song and artwork',
+  description: 'Send music lyrics with artist, song and artwork',
   usage: '-lyrics <song title>',
   author: 'kelvin',
 
@@ -60,7 +61,6 @@ module.exports = {
       }
 
       const { title, artist, image, lyrics, url } = data.data.response;
-
       const cleanText = cleanLyrics(lyrics);
 
       // Envoi de l’image d’abord
@@ -70,14 +70,14 @@ module.exports = {
           {
             attachment: {
               type: 'image',
-              payload: { url: image, is_reusable: true }
-            }
+              payload: { url: image, is_reusable: true },
+            },
           },
           pageAccessToken
         );
       }
 
-      // Envoi du texte formaté
+      // Format compact et propre
       const formatted = `🎵 *Lyrics Found!*\n\n👤 *Artist:* ${artist}\n🎶 *Song:* ${title}\n🌐 *Source:* [View on Genius](${url})\n\n${cleanText}`;
 
       const maxLength = 1900;
@@ -97,5 +97,5 @@ module.exports = {
         pageAccessToken
       );
     }
-  }
+  },
 };
