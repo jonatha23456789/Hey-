@@ -1,14 +1,16 @@
 const axios = require('axios');
 
-let cachedMangas = [];   // Stocke les mangas trouvés
-let cachedChapters = []; // Stocke les chapitres du manga choisi
+let cachedMangas = [];
+let cachedChapters = [];
 
 module.exports = {
   name: 'manga',
   description: 'Recherche et lecture de mangas',
 
   async execute({ message, bot }) {
-    const args = message.body.split(' ').slice(1);
+    // Récupère le texte correctement selon la version de Page Bot
+    const text = message.body || message.text || message.message || '';
+    const args = text.split(' ').slice(1);
     const senderId = message.sender.id;
 
     if (!args.length) {
@@ -17,7 +19,6 @@ module.exports = {
 
     const command = args[0].toLowerCase();
 
-    // --- Lire un chapitre ---
     if (command === 'lire') {
       const chapterIndex = parseInt(args[1], 10) - 1;
       if (isNaN(chapterIndex) || chapterIndex < 0 || chapterIndex >= cachedChapters.length) {
@@ -35,7 +36,6 @@ module.exports = {
       return;
     }
 
-    // --- Afficher les chapitres d’un manga sélectionné ---
     if (command === 'chap') {
       const mangaIndex = parseInt(args[1], 10) - 1;
       if (isNaN(mangaIndex) || mangaIndex < 0 || mangaIndex >= cachedMangas.length) {
@@ -52,7 +52,7 @@ module.exports = {
 
         cachedChapters = chapters.map(ch => ({
           title: ch.title,
-          pages: ch.pages, // liste des images du chapitre
+          pages: ch.pages,
         }));
 
         const list = chapters.map((ch, i) => `${i + 1}. ${ch.title}`).join('\n');
@@ -62,7 +62,7 @@ module.exports = {
       }
     }
 
-    // --- Recherche d’un manga par titre ---
+    // Recherche d’un manga
     const title = args.join(' ');
     try {
       const res = await axios.get(`https://miko-utilis.vercel.app/api/manga-search?search=${encodeURIComponent(title)}`);
