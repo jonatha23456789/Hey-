@@ -6,10 +6,13 @@ let cachedChapters = []; // Stocke les chapitres du manga choisi
 module.exports = {
   name: 'manga',
   description: 'Recherche et lecture de mangas',
-  
-  async execute(senderId, args, sendMessage) {
+
+  async execute({ message, bot }) {
+    const args = message.body.split(' ').slice(1);
+    const senderId = message.sender.id;
+
     if (!args.length) {
-      return sendMessage(senderId, 'Usage : `!manga <titre>` pour rechercher un manga.');
+      return bot.sendMessage(senderId, 'Usage : `!manga <titre>` pour rechercher un manga.');
     }
 
     const command = args[0].toLowerCase();
@@ -18,16 +21,16 @@ module.exports = {
     if (command === 'lire') {
       const chapterIndex = parseInt(args[1], 10) - 1;
       if (isNaN(chapterIndex) || chapterIndex < 0 || chapterIndex >= cachedChapters.length) {
-        return sendMessage(senderId, 'Numéro de chapitre invalide.');
+        return bot.sendMessage(senderId, 'Numéro de chapitre invalide.');
       }
 
       const chapter = cachedChapters[chapterIndex];
       if (!chapter.pages || !chapter.pages.length) {
-        return sendMessage(senderId, 'Aucune page trouvée pour ce chapitre.');
+        return bot.sendMessage(senderId, 'Aucune page trouvée pour ce chapitre.');
       }
 
       for (const pageUrl of chapter.pages) {
-        await sendMessage(senderId, { attachment: { type: 'image', payload: { url: pageUrl } } });
+        await bot.sendMessage(senderId, { attachment: { type: 'image', payload: { url: pageUrl } } });
       }
       return;
     }
@@ -36,7 +39,7 @@ module.exports = {
     if (command === 'chap') {
       const mangaIndex = parseInt(args[1], 10) - 1;
       if (isNaN(mangaIndex) || mangaIndex < 0 || mangaIndex >= cachedMangas.length) {
-        return sendMessage(senderId, 'Numéro de manga invalide.');
+        return bot.sendMessage(senderId, 'Numéro de manga invalide.');
       }
 
       const manga = cachedMangas[mangaIndex];
@@ -45,7 +48,7 @@ module.exports = {
         const res = await axios.get(`https://miko-utilis.vercel.app/api/manga-chapters?mangaId=${manga.id}`);
         const chapters = res.data.data.results || [];
 
-        if (!chapters.length) return sendMessage(senderId, 'Aucun chapitre trouvé.');
+        if (!chapters.length) return bot.sendMessage(senderId, 'Aucun chapitre trouvé.');
 
         cachedChapters = chapters.map(ch => ({
           title: ch.title,
@@ -53,9 +56,9 @@ module.exports = {
         }));
 
         const list = chapters.map((ch, i) => `${i + 1}. ${ch.title}`).join('\n');
-        return sendMessage(senderId, `Chapitres pour "${manga.title}" :\n\n${list}\n\nEnvoyez \`!manga lire <numéro>\` pour lire.`);
+        return bot.sendMessage(senderId, `Chapitres pour "${manga.title}" :\n\n${list}\n\nEnvoyez \`!manga lire <numéro>\` pour lire.`);
       } catch (err) {
-        return sendMessage(senderId, 'Erreur lors de la récupération des chapitres.');
+        return bot.sendMessage(senderId, 'Erreur lors de la récupération des chapitres.');
       }
     }
 
@@ -64,7 +67,7 @@ module.exports = {
     try {
       const res = await axios.get(`https://miko-utilis.vercel.app/api/manga-search?search=${encodeURIComponent(title)}`);
       const mangas = res.data.data.results || [];
-      if (!mangas.length) return sendMessage(senderId, `Aucun manga trouvé pour "${title}".`);
+      if (!mangas.length) return bot.sendMessage(senderId, `Aucun manga trouvé pour "${title}".`);
 
       cachedMangas = mangas;
 
@@ -74,9 +77,9 @@ module.exports = {
       });
       msg += 'Répondez avec `!manga chap <numéro>` pour voir les chapitres du manga choisi.';
 
-      return sendMessage(senderId, msg);
+      return bot.sendMessage(senderId, msg);
     } catch (err) {
-      return sendMessage(senderId, 'Erreur lors de la recherche du manga.');
+      return bot.sendMessage(senderId, 'Erreur lors de la recherche du manga.');
     }
   },
 };
