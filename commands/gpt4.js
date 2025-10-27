@@ -3,30 +3,45 @@ const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
     name: 'gpt4',
-    description: 'Interact with GPT-4o',
-    usage: 'gpt4 [your message]',
-    author: 'coffee',
+    description: 'Interact with GPT-4 from Miko API',
+    usage: '-gpt4 <your question>',
+    author: 'kelvin',
 
     async execute(senderId, args, pageAccessToken) {
-        const prompt = args.join(' ');
-        if (!prompt) return sendMessage(senderId, { text: "Usage: gpt4 <question>" }, pageAccessToken);
+        const prompt = args.join(' ').trim();
+        if (!prompt) {
+            return sendMessage(
+                senderId,
+                { text: '⚠️ Please provide a question.\nUsage: -gpt4 <your question>' },
+                pageAccessToken
+            );
+        }
 
         try {
-            const { data: { response } } = await axios.get(`https://kaiz-apis.gleeze.com/api/kaiz-ai?ask=${encodeURIComponent(prompt)}&uid=${senderId}&apikey=8c0a049d-29a8-474a-b15e-189e42e150fb`);
+            const apiUrl = `https://miko-utilis.vercel.app/api/gpt-4?query=${encodeURIComponent(prompt)}&userId=${senderId}`;
+            const { data } = await axios.get(apiUrl);
 
+            // Vérifie si la réponse existe
+            const responseText =
+                data?.response || data?.result || data?.answer || '❌ No response from the API.';
+
+            // Découpe si trop long
             const parts = [];
-
-            for (let i = 0; i < response.length; i += 1999) {
-                parts.push(response.substring(i, i + 1999));
+            for (let i = 0; i < responseText.length; i += 1999) {
+                parts.push(responseText.substring(i, i + 1999));
             }
 
-            // send all msg parts
+            // Envoi des messages un par un
             for (const part of parts) {
                 await sendMessage(senderId, { text: part }, pageAccessToken);
             }
-
-        } catch {
-            sendMessage(senderId, { text: 'There was an error generating the content. Please try again later.' }, pageAccessToken);
+        } catch (error) {
+            console.error('GPT4 Command Error:', error.response?.data || error.message);
+            await sendMessage(
+                senderId,
+                { text: '❌ There was an error generating the response. Please try again later.' },
+                pageAccessToken
+            );
         }
-    }
+    },
 };
