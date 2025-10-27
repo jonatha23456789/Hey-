@@ -1,161 +1,72 @@
 const axios = require('axios');
-const fs = require('fs');
 const { sendMessage } = require('../handles/sendMessage');
 
-const token = fs.readFileSync('token.txt', 'utf8');
-let cachedChapters = []; // Stocke les chapitres récupérés après une recherche
-
-// Fonction pour rechercher un manga par titre
-const searchMangaByTitle = async (title) => {
-  try {
-    const response = await axios.get('https://api.mangadex.org/manga', {
-      params: { title, limit: 5 },
-    });
-    return response.data.data.map((manga) => ({
-      id: manga.id,
-      title: manga.attributes.title.en || 'Sans titre',
-    }));
-  } catch (error) {
-    console.error('Erreur lors de la recherche de manga:', error.message);
-    throw new Error('Impossible de trouver des mangas correspondant à ce titre.');
-  }
-};
-
-// Fonction pour récupérer les chapitres d'un manga
-const getMangaChapters = async (mangaId) => {
-  try {
-    const response = await axios.get(`https://api.mangadex.org/manga/${mangaId}/feed`, {
-      params: { limit: 5, translatedLanguage: ['en'] },
-    });
-    return response.data.data.map((chapter) => ({
-      id: chapter.id,
-      title: chapter.attributes.title || 'Sans titre',
-      chapterNumber: chapter.attributes.chapter || 'Inconnu',
-    }));
-  } catch (error) {
-    console.error('Erreur lors de la récupération des chapitres:', error.message);
-    throw new Error('Impossible de récupérer les chapitres.');
-  }
-};
-
-// Fonction pour récupérer les URLs des images d'un chapitre
-const getMangaChapterImages = async (chapterId) => {
-  try {
-    const response = await axios.get(`https://api.mangadex.org/at-home/server/${chapterId}`);
-    const { baseUrl, chapter } = response.data;
-
-    return chapter.data.map((fileName) => `${baseUrl}/data/${chapter.hash}/${fileName}`);
-  } catch (error) {
-    console.error('Erreur lors de la récupération des images du chapitre:', error.message);
-    throw new Error('Impossible de récupérer les images du chapitre.');
-  }
-};
+let cachedMangas = []; // Stocke les mangas de la dernière recherche
 
 module.exports = {
   name: 'manga',
-  description: 'Recherche et lecture de mangas',
+  description: 'Recherche et lecture de mangas avec boutons interactifs',
   author: 'Tata',
 
   async execute(senderId, args) {
-    const pageAccessToken = token;
-
-    if (args.length === 0) {
-      await sendMessage(
-        senderId,
-        { text: 'Utilisation : `!manga <titre>` pour rechercher un manga ou `!manga lire <numéro>` pour lire un chapitre.' },
-        pageAccessToken
-      );
+    if (!args.length) {
+      await sendMessage(senderId, {
+        text: 'Utilisation : !manga <titre> pour rechercher un manga.'
+      });
       return;
     }
 
-    const command = args[0].toLowerCase();
+    const query = args.join(' ');
 
-    if (command === 'lire') {
-      const chapterIndex = parseInt(args[1], 10) - 1;
+    try {
+      const response = await axios.get(`https://miko-utilis.vercel.app/api/manga-search?search=${encodeURIComponent(query)}`);
+      const data = response.data;
 
-      if (isNaN(chapterIndex) || chapterIndex < 0 || chapterIndex >= cachedChapters.length) {
-        await sendMessage(
-          senderId,
-          { text: 'Veuillez entrer un numéro de chapitre valide parmi les chapitres listés.' },
-          pageAccessToken
-        );
+      if (!data.status || !data.data.results.length) {
+        await sendMessage(senderId, { text: `Aucun manga trouvé pour "${query}".` });
         return;
       }
 
-      const chapterId = cachedChapters[chapterIndex].id;
+      cachedMangas = data.data.results.slice(0, 5); // Stocke les 5 premiers résultats max
 
-      try {
-        const imageUrls = await getMangaChapterImages(chapterId);
+      // Création du message avec boutons
+      const buttons = cachedMangas.map((manga, index) => ({
+        type: 'postback',
+        title: manga.title,
+        payload: `manga_chapters_${index}`
+      }));
 
-        for (const url of imageUrls) {
-          try {
-            console.log(`Envoi de l'image : ${url}`);
-            await sendMessage(
-              senderId,
-              {
-                attachment: {
-                  type: 'image',
-                  payload: { url },
-                },
-              },
-              pageAccessToken
-            );
-          } catch (error) {
-            console.error(`Erreur lors de l'envoi de l'image (${url}):`, error.message);
-          }
-        }
+      await sendMessage(senderId, {
+        text: `Résultats pour "${query}" :\nChoisis un manga pour voir ses chapitres.`,
+        buttons
+      });
 
-        await sendMessage(
-          senderId,
-          { text: 'Chapitre envoyé avec succès !' },
-          pageAccessToken
-        );
-      } catch (error) {
-        console.error('Erreur dans la commande manga lire:', error.message);
-        await sendMessage(
-          senderId,
-          { text: 'Une erreur est survenue lors de la récupération du chapitre.' },
-          pageAccessToken
-        );
-      }
-    } else {
-      // Rechercher un manga par titre et lister ses chapitres
-      const title = args.join(' ');
-
-      try {
-        const mangas = await searchMangaByTitle(title);
-
-        if (mangas.length === 0) {
-          await sendMessage(
-            senderId,
-            { text: `Aucun manga trouvé pour le titre "${title}".` },
-            pageAccessToken
-          );
-          return;
-        }
-
-        const manga = mangas[0]; // On prend le premier résultat
-        const chapters = await getMangaChapters(manga.id);
-
-        cachedChapters = chapters; // Stocke les chapitres dans le cache
-
-        const chapterList = chapters
-          .map((ch, index) => `${index + 1}. Chapitre ${ch.chapterNumber} - ${ch.title}`)
-          .join('\n');
-
-        await sendMessage(
-          senderId,
-          { text: `Manga trouvé : ${manga.title}\n\nChapitres disponibles :\n${chapterList}\n\nEnvoyez \`!manga lire <numéro>\` pour lire un chapitre.` },
-          pageAccessToken
-        );
-      } catch (error) {
-        console.error('Erreur dans la commande manga:', error.message);
-        await sendMessage(
-          senderId,
-          { text: 'Impossible de récupérer les chapitres pour ce manga.' },
-          pageAccessToken
-        );
-      }
+    } catch (err) {
+      console.error('Erreur API manga:', err.message);
+      await sendMessage(senderId, { text: 'Impossible de récupérer les mangas pour le moment.' });
     }
   },
+
+  // Fonction pour gérer les boutons
+  async handlePostback(senderId, payload) {
+    if (!payload.startsWith('manga_chapters_')) return;
+
+    const index = parseInt(payload.split('_').pop(), 10);
+    const manga = cachedMangas[index];
+
+    if (!manga) {
+      await sendMessage(senderId, { text: 'Manga introuvable.' });
+      return;
+    }
+
+    // Ici on simule les chapitres (tu peux remplacer par un vrai appel API)
+    const chapters = Array.from({ length: 5 }, (_, i) => `Chapitre ${i + 1}`);
+
+    let messageText = `Chapitres disponibles pour "${manga.title}" :\n\n`;
+    chapters.forEach((ch, i) => {
+      messageText += `${i + 1}. ${ch}\n`;
+    });
+
+    await sendMessage(senderId, { text: messageText });
+  }
 };
