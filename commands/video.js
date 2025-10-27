@@ -1,73 +1,47 @@
-const axios = require('axios');
-const { sendMessage } = require('../handles/sendMessage');
+const { Telegraf, Markup } = require('telegraf');
+const fetch = require('node-fetch');
 
-module.exports = {
-  name: 'video',
-  description: 'Send YouTube video in high quality by name',
-  usage: '-video <video name>',
-  author: 'kelvin',
+const bot = new Telegraf('TON_BOT_TOKEN'); // remplace TON_BOT_TOKEN par ton token
 
-  async execute(senderId, args, pageAccessToken) {
-    const query = args.join(' ').trim();
-    if (!query) {
-      return sendMessage(
-        senderId,
-        { text: '⚠️ Please provide the name of the video.\nUsage: -video <video name>' },
-        pageAccessToken
-      );
+bot.command('video', async (ctx) => {
+  const url = ctx.message.text.split(' ')[1]; // récupère le lien après la commande
+  if (!url) return ctx.reply('⚠️ Veuillez fournir un lien YouTube.');
+
+  try {
+    const res = await fetch(`https://arychauhann.onrender.com/api/youtubemp4?url=${encodeURIComponent(url)}`);
+    const data = await res.json();
+
+    if (!data || !data.other) return ctx.reply('🚨 Impossible de récupérer la vidéo.');
+
+    // Filtre les liens MP4 et audio
+    const mp4Links = data.other.filter(o => o.link.includes('mp4'));
+    const audioLinks = data.other.filter(o => o.link.includes('audio') || o.link.includes('m4a') || o.link.includes('webm'));
+
+    // Message principal avec titre et miniature
+    await ctx.replyWithPhoto(data.thumbnail, {
+      caption: `🎬 *${data.title}*\n\n📥 Choisis la qualité à télécharger :`,
+      parse_mode: 'Markdown'
+    });
+
+    // Boutons MP4
+    if (mp4Links.length > 0) {
+      await ctx.reply('💻 Vidéo (MP4) :', Markup.inlineKeyboard(
+        mp4Links.map(o => Markup.button.url(o.quality, o.link)), { columns: 2 }
+      ));
     }
 
-    try {
-      // 🔍 Step 1: Search YouTube for the first result
-      const searchUrl = `https://noobs-api.vercel.app/api/ytsearch?query=${encodeURIComponent(query)}`;
-      const searchRes = await axios.get(searchUrl);
-
-      const video = searchRes.data && searchRes.data.results && searchRes.data.results[0];
-      if (!video || !video.url) {
-        return sendMessage(senderId, { text: '❌ No video found for your query.' }, pageAccessToken);
-      }
-
-      const videoUrl = video.url;
-
-      // 🎬 Step 2: Fetch video download links from your API
-      const { data } = await axios.get(`https://arychauhann.onrender.com/api/youtubemp4?url=${encodeURIComponent(videoUrl)}`);
-
-      if (!data || !data.main) {
-        return sendMessage(senderId, { text: '❌ Could not get video details. Try again later.' }, pageAccessToken);
-      }
-
-      // 🖼️ Step 3: Send thumbnail + details
-      const caption = `🎬 *${data.title}*\n👤 Operator: ${data.operator}\n\n📺 *Available Qualities:*`;
-      const qualities =
-        data.other?.map(q => `• ${q.quality} — [Download Link](${q.link})`).join('\n') || 'No other formats found.';
-
-      await sendMessage(
-        senderId,
-        {
-          attachment: {
-            type: 'image',
-            payload: { url: data.thumbnail }
-          },
-          text: `${caption}\n\n${qualities}\n\n🎥 *Main Video Link:*\n${data.main}`
-        },
-        pageAccessToken
-      );
-
-      // 📤 Step 4: Send main video
-      await sendMessage(
-        senderId,
-        {
-          attachment: {
-            type: 'video',
-            payload: { url: data.main }
-          },
-          text: `🎥 Now playing: ${data.title}`
-        },
-        pageAccessToken
-      );
-    } catch (error) {
-      console.error('Video Command Error:', error.message || error);
-      sendMessage(senderId, { text: '🚨 Error fetching or sending video. Try again.' }, pageAccessToken);
+    // Boutons audio
+    if (audioLinks.length > 0) {
+      await ctx.reply('🎵 Audio :', Markup.inlineKeyboard(
+        audioLinks.map(o => Markup.button.url(o.quality, o.link)), { columns: 2 }
+      ));
     }
+
+  } catch (err) {
+    console.error(err);
+    ctx.reply('🚨 Erreur lors de la récupération de la vidéo.');
   }
-};
+});
+
+bot.launch();
+console.log('Bot démarré...');
