@@ -1,80 +1,73 @@
 const axios = require('axios');
 
-let cachedMangas = [];
-let cachedChapters = [];
+let cachedManga = []; // stocke les mangas de la dernière recherche
+let cachedChapters = []; // stocke les chapitres du manga choisi
 
 module.exports = {
-  name: 'manga',
-  description: 'Recherche et lecture de mangas',
+    name: 'manga',
+    description: 'Recherche et lecture de mangas',
 
-  async execute(event, bot) {
-    // Vérifie où se trouve l'ID de l'utilisateur
-    const userId = event.sender?.id || event.userId;
-    if (!userId) return console.error('Impossible de récupérer l\'ID de l\'utilisateur !');
+    async execute(event, args, sendMessage) {
+        // Récupération sécurisée de l'ID de l'utilisateur
+        const userId = event.sender?.id || event.userId || event.chat?.id;
+        if (!userId) {
+            console.error('Impossible de récupérer l\'ID de l\'utilisateur !', event);
+            return;
+        }
 
-    const text = (event.message?.text || event.text || '').trim();
-    if (!text.startsWith('!manga')) return;
+        if (!args || args.length === 0) {
+            await sendMessage(userId, 'Utilisation : !manga <titre> ou !manga chap <numéro>');
+            return;
+        }
 
-    const args = text.split(' ').slice(1);
+        const command = args[0].toLowerCase();
 
-    if (!args.length) {
-      return bot.sendMessage(userId, 'Usage : !manga <titre> pour rechercher un manga.');
+        if (command === 'chap') {
+            // Affichage des chapitres d’un manga choisi
+            const index = parseInt(args[1], 10) - 1;
+            if (isNaN(index) || index < 0 || index >= cachedChapters.length) {
+                await sendMessage(userId, 'Numéro de chapitre invalide.');
+                return;
+            }
+
+            const chapter = cachedChapters[index];
+            let message = `Chapitre ${chapter.chapterNumber} : ${chapter.title}\n`;
+            message += `Lien de lecture : ${chapter.url}`;
+
+            await sendMessage(userId, message);
+
+        } else {
+            // Recherche d’un manga
+            const title = args.join(' ');
+            try {
+                const response = await axios.get(`https://miko-utilis.vercel.app/api/manga-search?search=${encodeURIComponent(title)}`);
+                const data = response.data;
+
+                if (!data.status || !data.data.results || data.data.results.length === 0) {
+                    await sendMessage(userId, `Aucun manga trouvé pour "${title}".`);
+                    return;
+                }
+
+                cachedManga = data.data.results;
+                let message = 'Mangas trouvés :\n';
+                cachedManga.forEach((m, i) => {
+                    message += `${i + 1}. ${m.title}\n`;
+                });
+
+                message += '\nRépondez avec !manga chap <numéro> pour voir les chapitres du manga choisi.';
+                await sendMessage(userId, message);
+
+                // On peut préremplir les chapitres pour le premier manga (optionnel)
+                cachedChapters = cachedManga.map((m, i) => ({
+                    chapterNumber: i + 1,
+                    title: m.title,
+                    url: m.cover // ici on met l'image comme lien de lecture par défaut
+                }));
+
+            } catch (error) {
+                console.error('Erreur lors de la recherche du manga :', error.message);
+                await sendMessage(userId, 'Erreur lors de la recherche du manga.');
+            }
+        }
     }
-
-    const command = args[0].toLowerCase();
-
-    // Lire un chapitre
-    if (command === 'lire') {
-      const chapterIndex = parseInt(args[1], 10) - 1;
-      if (isNaN(chapterIndex) || chapterIndex < 0 || chapterIndex >= cachedChapters.length) {
-        return bot.sendMessage(userId, 'Numéro de chapitre invalide.');
-      }
-      const chapter = cachedChapters[chapterIndex];
-      if (!chapter.pages || !chapter.pages.length) return bot.sendMessage(userId, 'Aucune page trouvée.');
-
-      for (const page of chapter.pages) {
-        await bot.sendMessage(userId, page); // PageBot supporte juste du texte ou URL image simple
-      }
-      return;
-    }
-
-    // Voir les chapitres
-    if (command === 'chap') {
-      const mangaIndex = parseInt(args[1], 10) - 1;
-      if (isNaN(mangaIndex) || mangaIndex < 0 || mangaIndex >= cachedMangas.length) {
-        return bot.sendMessage(userId, 'Numéro de manga invalide.');
-      }
-      const manga = cachedMangas[mangaIndex];
-
-      try {
-        const res = await axios.get(`https://miko-utilis.vercel.app/api/manga-chapters?mangaId=${manga.id}`);
-        const chapters = res.data.data.results || [];
-        cachedChapters = chapters.map(ch => ({ title: ch.title, pages: ch.pages }));
-
-        const list = chapters.map((ch, i) => `${i + 1}. ${ch.title}`).join('\n');
-        return bot.sendMessage(userId, `Chapitres pour "${manga.title}":\n${list}\nEnvoyez !manga lire <numéro> pour lire.`);
-      } catch {
-        return bot.sendMessage(userId, 'Erreur lors de la récupération des chapitres.');
-      }
-    }
-
-    // Recherche manga
-    const title = args.join(' ');
-    try {
-      const res = await axios.get(`https://miko-utilis.vercel.app/api/manga-search?search=${encodeURIComponent(title)}`);
-      const mangas = res.data.data.results || [];
-      if (!mangas.length) return bot.sendMessage(userId, `Aucun manga trouvé pour "${title}".`);
-
-      cachedMangas = mangas;
-
-      let message = 'Mangas trouvés :\n';
-      mangas.forEach((m, i) => {
-        message += `${i + 1}. ${m.title} - ${m.cover}\n`; // Page Bot peut afficher l'image URL
-      });
-      message += '\nRépondez avec !manga chap <numéro> pour voir les chapitres du manga choisi.';
-      return bot.sendMessage(userId, message);
-    } catch {
-      return bot.sendMessage(userId, 'Erreur lors de la recherche du manga.');
-    }
-  },
 };
