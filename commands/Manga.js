@@ -8,9 +8,14 @@ module.exports = {
   description: 'Recherche et lecture de mangas',
 
   async execute(event, bot) {
-    const userId = event.sender.id;
-    const text = (event.message && event.message.text) || '';
-    const args = text.trim().split(' ').slice(1);
+    // Vérifie où se trouve l'ID de l'utilisateur
+    const userId = event.sender?.id || event.userId;
+    if (!userId) return console.error('Impossible de récupérer l\'ID de l\'utilisateur !');
+
+    const text = (event.message?.text || event.text || '').trim();
+    if (!text.startsWith('!manga')) return;
+
+    const args = text.split(' ').slice(1);
 
     if (!args.length) {
       return bot.sendMessage(userId, 'Usage : !manga <titre> pour rechercher un manga.');
