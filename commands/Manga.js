@@ -7,11 +7,12 @@ module.exports = {
   name: 'manga',
   description: 'Recherche et lecture de mangas',
 
-  async execute({ message, bot }) {
-    // Récupère le texte correctement selon la version de Page Bot
-    const text = message.body || message.text || message.message || '';
-    const args = text.split(' ').slice(1);
-    const senderId = message.sender.id;
+  async execute(event, bot) {
+    const text = (event.message && event.message.text) || event.text || event.body || '';
+    if (!text) return;
+
+    const args = text.trim().split(' ').slice(1);
+    const senderId = event.sender ? event.sender.id : event.from;
 
     if (!args.length) {
       return bot.sendMessage(senderId, 'Usage : `!manga <titre>` pour rechercher un manga.');
@@ -19,6 +20,7 @@ module.exports = {
 
     const command = args[0].toLowerCase();
 
+    // Lire un chapitre
     if (command === 'lire') {
       const chapterIndex = parseInt(args[1], 10) - 1;
       if (isNaN(chapterIndex) || chapterIndex < 0 || chapterIndex >= cachedChapters.length) {
@@ -36,6 +38,7 @@ module.exports = {
       return;
     }
 
+    // Voir les chapitres d’un manga sélectionné
     if (command === 'chap') {
       const mangaIndex = parseInt(args[1], 10) - 1;
       if (isNaN(mangaIndex) || mangaIndex < 0 || mangaIndex >= cachedMangas.length) {
@@ -62,7 +65,7 @@ module.exports = {
       }
     }
 
-    // Recherche d’un manga
+    // Recherche de mangas
     const title = args.join(' ');
     try {
       const res = await axios.get(`https://miko-utilis.vercel.app/api/manga-search?search=${encodeURIComponent(title)}`);
@@ -71,13 +74,19 @@ module.exports = {
 
       cachedMangas = mangas;
 
-      let msg = `Mangas trouvés pour "${title}" :\n\n`;
-      mangas.forEach((m, i) => {
-        msg += `${i + 1}. ${m.title}\n${m.cover}\n\n`;
-      });
-      msg += 'Répondez avec `!manga chap <numéro>` pour voir les chapitres du manga choisi.';
+      // Envoyer chaque manga avec sa couverture
+      for (let i = 0; i < mangas.length; i++) {
+        const m = mangas[i];
+        await bot.sendMessage(senderId, {
+          attachment: {
+            type: 'image',
+            payload: { url: m.cover },
+          },
+        });
+        await bot.sendMessage(senderId, `${i + 1}. ${m.title}`);
+      }
 
-      return bot.sendMessage(senderId, msg);
+      await bot.sendMessage(senderId, 'Répondez avec `!manga chap <numéro>` pour voir les chapitres du manga choisi.');
     } catch (err) {
       return bot.sendMessage(senderId, 'Erreur lors de la recherche du manga.');
     }
