@@ -2,46 +2,53 @@ const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
-    name: 'gpt4',
-    description: 'Interact with GPT-4 from Miko API',
-    usage: '-gpt4 <your question>',
-    author: 'kelvin',
+  name: 'gpt4',
+  description: 'Interact with GPT-4 via Miko API',
+  usage: '-gpt4 <your message>',
+  author: 'kelvin',
 
-    async execute(senderId, args, pageAccessToken) {
-        const prompt = args.join(' ').trim();
-        if (!prompt) {
-            return sendMessage(
-                senderId,
-                { text: '⚠️ Please provide a question.\nUsage: -gpt4 <your question>' },
-                pageAccessToken
-            );
-        }
+  async execute(senderId, args, pageAccessToken) {
+    const prompt = args.join(' ').trim();
+    if (!prompt) {
+      return sendMessage(
+        senderId,
+        { text: '⚠️ Please provide a question.\nUsage: -gpt4 <your question>' },
+        pageAccessToken
+      );
+    }
 
-        try {
-            const apiUrl = `https://miko-utilis.vercel.app/api/gpt-4?query=${encodeURIComponent(prompt)}&userId=${senderId}`;
-            const { data } = await axios.get(apiUrl);
+    const apiUrl = `https://miko-utilis.vercel.app/api/gpt-4?query=${encodeURIComponent(prompt)}&userId=${senderId}`;
 
-            // Vérifie si la réponse existe
-            const responseText =
-                data?.response || data?.result || data?.answer || '❌ No response from the API.';
+    try {
+      const { data } = await axios.get(apiUrl);
 
-            // Découpe si trop long
-            const parts = [];
-            for (let i = 0; i < responseText.length; i += 1999) {
-                parts.push(responseText.substring(i, i + 1999));
-            }
+      if (!data || !data.status || !data.data?.response) {
+        return sendMessage(
+          senderId,
+          { text: '❌ No response from the API.' },
+          pageAccessToken
+        );
+      }
 
-            // Envoi des messages un par un
-            for (const part of parts) {
-                await sendMessage(senderId, { text: part }, pageAccessToken);
-            }
-        } catch (error) {
-            console.error('GPT4 Command Error:', error.response?.data || error.message);
-            await sendMessage(
-                senderId,
-                { text: '❌ There was an error generating the response. Please try again later.' },
-                pageAccessToken
-            );
-        }
-    },
+      const reply = data.data.response;
+
+      // Si la réponse est trop longue, on la découpe
+      const maxLength = 1900;
+      for (let i = 0; i < reply.length; i += maxLength) {
+        await sendMessage(
+          senderId,
+          { text: reply.slice(i, i + maxLength) },
+          pageAccessToken
+        );
+      }
+
+    } catch (error) {
+      console.error('GPT4 Command Error:', error.message || error);
+      await sendMessage(
+        senderId,
+        { text: '🚨 An error occurred while contacting the GPT-4 API.' },
+        pageAccessToken
+      );
+    }
+  }
 };
