@@ -3,7 +3,7 @@ const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
   name: 'imagine',
-  description: 'Create an AI image using Aryan Chauhan API.',
+  description: 'Create an AI image using Nekolabs API.',
   usage: '-imagine <prompt>',
   author: 'kelvin',
 
@@ -13,17 +13,17 @@ module.exports = {
     if (!prompt) {
       return sendMessage(
         senderId,
-        { text: '⚠️ Please provide a prompt.\nExample: -imagine anime girl' },
+        { text: '⚠️ Please provide a prompt.\nExample: -imagine anime girl with sword' },
         pageAccessToken
       );
     }
 
-    const apiUrl = `https://arychauhann.onrender.com/api/xl?prompt=${encodeURIComponent(prompt)}`;
+    const apiUrl = `https://api.nekolabs.web.id/ai/imagen/4?prompt=${encodeURIComponent(prompt)}&ratio=1%3A1`;
 
     try {
       const { data } = await axios.get(apiUrl);
 
-      if (!data || data.status !== 'success' || !data.url) {
+      if (!data || !data.success || !data.result) {
         return sendMessage(
           senderId,
           { text: '❌ Failed to generate image. Please try again later.' },
@@ -31,21 +31,21 @@ module.exports = {
         );
       }
 
-      // Envoi d'abord du message texte
+      // Envoi du message d’information
       await sendMessage(
         senderId,
-        { text: `✨ Image successfully created!\n🎨 Prompt: ${prompt}\n👤 Operator: ${data.operator}` },
+        { text: `✨ *AI Image Created!*\n🎨 Prompt: ${prompt}\n🕒 Response Time: ${data.responseTime || 'N/A'}` },
         pageAccessToken
       );
 
-      // Ensuite l'image
+      // Envoi de l’image générée
       await sendMessage(
         senderId,
         {
           attachment: {
             type: 'image',
             payload: {
-              url: data.url,
+              url: data.result,
               is_reusable: true
             }
           }
@@ -57,7 +57,7 @@ module.exports = {
       console.error('Imagine Command Error:', error.message || error);
       return sendMessage(
         senderId,
-        { text: '🚨 An error occurred while generating the image.' },
+        { text: '🚨 An error occurred while generating the image. Please try again later.' },
         pageAccessToken
       );
     }
