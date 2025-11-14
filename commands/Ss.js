@@ -1,46 +1,62 @@
-const axios = require('axios');
-const { sendMessage } = require('../handles/sendMessage');
+const axios = require("axios");
+const fs = require("fs");
+const path = require("path");
+const FormData = require("form-data");
+const { sendMessage } = require("../handles/sendMessage");
 
 module.exports = {
-  name: 'ss',
-  description: 'Take screenshots of webpages or send images directly',
-  usage: '-screenshot <url1> <url2> ...',
-  author: 'kelvin',
+  name: "ss",
+  description: "Take screenshots of webpages (FULL Facebook compatible)",
+  usage: "-ss <url>",
+  author: "kelvin",
 
   async execute(senderId, args, pageAccessToken) {
     if (!args.length) {
-      return sendMessage(senderId, { text: '⚠️ Please provide at least one URL.\nUsage: -screenshot <url1> <url2> ...' }, pageAccessToken);
+      return sendMessage(
+        senderId,
+        { text: "⚠️ Provide a URL.\nExample: -ss https://youtube.com" },
+        pageAccessToken
+      );
     }
-
-    const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
 
     for (const url of args) {
       try {
-        const isImage = imageExtensions.some(ext => url.toLowerCase().endsWith(ext));
+        // URL du screenshot (API STABLE)
+        const screenshotUrl = `https://shot.screenshotapi.net/screenshot?&url=${encodeURIComponent(
+          url
+        )}&full_page=true&output=image&file_type=png`;
 
-        if (isImage) {
-          await sendMessage(senderId, {
-            attachment: { type: 'image', payload: { url } }
-          }, pageAccessToken);
-          continue;
-        }
+        // Téléchargement de l’image dans le serveur
+        const imgPath = path.join(__dirname, `screenshot_${Date.now()}.png`);
+        const response = await axios.get(screenshotUrl, {
+          responseType: "arraybuffer",
+        });
 
-        // Nouvelle API stable compatible Facebook
-        const apiUrl = `https://shot.screenshotapi.net/screenshot?&url=${encodeURIComponent(url)}&full_page=true&output=image&file_type=png`;
+        fs.writeFileSync(imgPath, response.data);
 
-        await sendMessage(senderId, {
-          attachment: {
-            type: 'image',
-            payload: {
-              url: apiUrl,
-              is_reusable: true
-            }
-          }
-        }, pageAccessToken);
+        // Upload vers Facebook
+        const form = new FormData();
+        form.append("recipient", JSON.stringify({ id: senderId }));
+        form.append("message", JSON.stringify({ attachment: { type: "image", payload: {} } }));
+        form.append("filedata", fs.createReadStream(imgPath));
 
-      } catch (error) {
-        console.error(`Screenshot Error for ${url}:`, error.message || error);
-        await sendMessage(senderId, { text: `❌ An error occurred with: ${url}` }, pageAccessToken);
+        await axios.post(
+          `https://graph.facebook.com/v17.0/me/messages?access_token=${pageAccessToken}`,
+          form,
+          { headers: form.getHeaders() }
+        );
+
+        // Supprimer le fichier temporaire
+        fs.unlinkSync(imgPath);
+
+      } catch (err) {
+        console.error("Screenshot ERROR:", err.message || err);
+
+        await sendMessage(
+          senderId,
+          { text: `❌ Unable to screenshot: ${url}` },
+          pageAccessToken
+        );
       }
     }
   }
