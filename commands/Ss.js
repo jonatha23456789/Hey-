@@ -25,13 +25,16 @@ module.exports = {
           continue;
         }
 
-        // Nouvelle API — fonctionne sur YouTube
-        const screenshotUrl = `https://image.thum.io/get/full/${encodeURIComponent(url)}`;
+        // Nouvelle API stable compatible Facebook
+        const apiUrl = `https://shot.screenshotapi.net/screenshot?&url=${encodeURIComponent(url)}&full_page=true&output=image&file_type=png`;
 
         await sendMessage(senderId, {
           attachment: {
             type: 'image',
-            payload: { url: screenshotUrl }
+            payload: {
+              url: apiUrl,
+              is_reusable: true
+            }
           }
         }, pageAccessToken);
 
