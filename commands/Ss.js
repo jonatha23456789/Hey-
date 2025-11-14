@@ -21,15 +21,14 @@ module.exports = {
 
     for (const url of args) {
       try {
-        // URL du screenshot (API STABLE)
-        const screenshotUrl = `https://shot.screenshotapi.net/screenshot?&url=${encodeURIComponent(
-          url
-        )}&full_page=true&output=image&file_type=png`;
+        // Nouvelle API ultra-stable
+        const screenshotUrl = `https://image.thum.io/get/fullpage/${encodeURIComponent(url)}`;
 
-        // Téléchargement de l’image dans le serveur
-        const imgPath = path.join(__dirname, `screenshot_${Date.now()}.png`);
+        // Téléchargement local
+        const imgPath = path.join(__dirname, `ss_${Date.now()}.png`);
         const response = await axios.get(screenshotUrl, {
           responseType: "arraybuffer",
+          timeout: 25000
         });
 
         fs.writeFileSync(imgPath, response.data);
@@ -37,7 +36,7 @@ module.exports = {
         // Upload vers Facebook
         const form = new FormData();
         form.append("recipient", JSON.stringify({ id: senderId }));
-        form.append("message", JSON.stringify({ attachment: { type: "image", payload: {} } }));
+        form.append("message", JSON.stringify({ attachment: { type: "image", payload: {} }}));
         form.append("filedata", fs.createReadStream(imgPath));
 
         await axios.post(
@@ -46,11 +45,11 @@ module.exports = {
           { headers: form.getHeaders() }
         );
 
-        // Supprimer le fichier temporaire
+        // Supprimer le fichier
         fs.unlinkSync(imgPath);
 
-      } catch (err) {
-        console.error("Screenshot ERROR:", err.message || err);
+      } catch (error) {
+        console.error("Screenshot ERROR:", error.message || error);
 
         await sendMessage(
           senderId,
