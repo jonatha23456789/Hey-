@@ -17,7 +17,7 @@ async function getImageUrl(event, token) {
 }
 
 module.exports = {
-  name: 'imgur',
+  name: 'imgbb',
   description: 'Upload image to imgbb',
   author: 'Hk',
   usage: '-imgbb (reply to an image)',
