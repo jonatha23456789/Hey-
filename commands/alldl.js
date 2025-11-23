@@ -15,62 +15,84 @@ const apiKeys = [
 
 const getRandomKey = () => apiKeys[Math.floor(Math.random() * apiKeys.length)];
 
+async function downloadMedia(senderId, url, pageAccessToken) {
+
+  let response;
+  let attempts = 0;
+  const triedKeys = new Set();
+
+  while (attempts < apiKeys.length) {
+    const apiKey = getRandomKey();
+    if (triedKeys.has(apiKey)) continue;
+    triedKeys.add(apiKey);
+
+    const options = {
+      method: 'POST',
+      url: 'https://social-download-all-in-one.p.rapidapi.com/v1/social/autolink',
+      headers: {
+        'x-rapidapi-key': apiKey,
+        'x-rapidapi-host': 'social-download-all-in-one.p.rapidapi.com',
+        'Content-Type': 'application/json'
+      },
+      data: { url }
+    };
+
+    try {
+      response = await axios.request(options);
+      if (response.data.medias) break;
+    } catch (error) {
+      console.warn(`Failed with API key ${apiKey}: ${error.message}`);
+    }
+    attempts++;
+  }
+
+  if (!response || !response.data.medias) {
+    return sendMessage(senderId, { text: '❌ Impossible de télécharger la vidéo.' }, pageAccessToken);
+  }
+
+  const media =
+    response.data.medias.find(m => m.type === 'video' && m.quality === 'HD') ||
+    response.data.medias[0];
+
+  if (!media) {
+    return sendMessage(senderId, { text: '❌ Aucune vidéo trouvée.' }, pageAccessToken);
+  }
+
+  const videoUrl = media.url;
+
+  await sendMessage(senderId, {
+    attachment: {
+      type: 'video',
+      payload: { url: videoUrl }
+    }
+  }, pageAccessToken);
+}
+
 module.exports = {
   name: 'alldl',
-  description: 'Download videos using links from multiple social media platforms, including Facebook Reels, Instagram Threads, Snapchat videos, TikTok videos, Twitter videos, and YouTube Shorts.',
+  description: 'Download videos from any social media link.',
   usage: '-alldl [link]',
   author: 'coffee',
 
+  // ----------- Commande normale --------------
   async execute(senderId, args, pageAccessToken) {
     const url = args.join(' ').trim();
-    if (!url) return sendMessage(senderId, { text: `Usage: alldl [link]` }, pageAccessToken);
+    if (!url) return sendMessage(senderId, { text: `Usage: alldl [lien]` }, pageAccessToken);
 
-    let response;
-    let attempts = 0;
-    const triedKeys = new Set();
+    await downloadMedia(senderId, url, pageAccessToken);
+  },
 
-    while (attempts < apiKeys.length) {
-      const apiKey = getRandomKey();
-      if (triedKeys.has(apiKey)) continue;
-      triedKeys.add(apiKey);
+  // ----------- Téléchargement automatique --------------
+  async on(senderId, message, pageAccessToken) {
 
-      const options = {
-        method: 'POST',
-        url: 'https://social-download-all-in-one.p.rapidapi.com/v1/social/autolink',
-        headers: {
-          'x-rapidapi-key': apiKey,
-          'x-rapidapi-host': 'social-download-all-in-one.p.rapidapi.com',
-          'Content-Type': 'application/json'
-        },
-        data: { url }
-      };
+    const url = message.trim();
 
-      try {
-        response = await axios.request(options);
-        if (response.data.medias) break;
-      } catch (error) {
-        console.warn(`Failed with API key ${apiKey}: ${error.message}`);
-      }
-      attempts++;
+    // Détection automatique des liens
+    if (!url.match(/(tiktok\.com|fb\.watch|facebook\.com|youtube\.com|youtu\.be|instagram\.com)/i)) {
+      return;
     }
 
-    if (!response || !response.data.medias) {
-      return sendMessage(senderId, { text: 'Error: Unable to fetch video from the provided link.' }, pageAccessToken);
-    }
-
-    const media = response.data.medias.find(media => media.type === 'video' && media.quality === 'HD') || response.data.medias[0];
-
-    if (!media) {
-      return sendMessage(senderId, { text: 'Error: No video found in the provided link.' }, pageAccessToken);
-    }
-
-    const videoUrl = media.url;
-
-    await sendMessage(senderId, {
-      attachment: {
-        type: 'video',
-        payload: { url: videoUrl }
-      }
-    }, pageAccessToken);
+    // Téléchargement direct
+    await downloadMedia(senderId, url, pageAccessToken);
   }
 };
