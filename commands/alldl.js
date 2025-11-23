@@ -17,13 +17,17 @@ const getRandomKey = () => apiKeys[Math.floor(Math.random() * apiKeys.length)];
 
 module.exports = {
   name: 'alldl',
-  description: 'Download videos using links from multiple social media platforms, including Facebook Reels, Instagram Threads, Snapchat videos, TikTok videos, Twitter videos, and YouTube Shorts.',
-  usage: '-alldl [link]',
-  author: 'coffee',
+  description: 'Auto video downloader for TikTok, Facebook, YouTube, Instagram, Twitter, etc.',
+  author: 'kelvin',
 
   async execute(senderId, args, pageAccessToken) {
     const url = args.join(' ').trim();
-    if (!url) return sendMessage(senderId, { text: `Usage: alldl [link]` }, pageAccessToken);
+
+    // 🔥 AUTO DETECTION (YouTube, TikTok, FB, IG, X)
+    const supported = /(tiktok\.com|facebook\.com|fb\.watch|youtube\.com|youtu\.be|instagram\.com|x\.com|twitter\.com)/i;
+    if (!supported.test(url)) return; // ignore si ce n’est pas un lien
+
+    await sendMessage(senderId, { text: "⏳ Downloading your video...\nPlease wait..." }, pageAccessToken);
 
     let response;
     let attempts = 0;
@@ -55,22 +59,28 @@ module.exports = {
     }
 
     if (!response || !response.data.medias) {
-      return sendMessage(senderId, { text: 'Error: Unable to fetch video from the provided link.' }, pageAccessToken);
+      return sendMessage(senderId, { text: '❌ Could not download this link.' }, pageAccessToken);
     }
 
-    const media = response.data.medias.find(media => media.type === 'video' && media.quality === 'HD') || response.data.medias[0];
+    const media =
+      response.data.medias.find(m => m.type === 'video' && m.quality === 'HD') ||
+      response.data.medias[0];
 
     if (!media) {
-      return sendMessage(senderId, { text: 'Error: No video found in the provided link.' }, pageAccessToken);
+      return sendMessage(senderId, { text: '❌ No downloadable video found.' }, pageAccessToken);
     }
 
     const videoUrl = media.url;
 
-    await sendMessage(senderId, {
-      attachment: {
-        type: 'video',
-        payload: { url: videoUrl }
-      }
-    }, pageAccessToken);
+    return sendMessage(
+      senderId,
+      {
+        attachment: {
+          type: 'video',
+          payload: { url: videoUrl }
+        }
+      },
+      pageAccessToken
+    );
   }
 };
