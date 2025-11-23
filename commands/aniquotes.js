@@ -2,29 +2,79 @@ const axios = require('axios');
 
 module.exports = {
   name: 'aniquotes',
-  description: 'fetch a random anime quote!',
-  author: 'Dale Mekumi', 
+  description: 'Fetch a random anime quote with character image',
+  author: 'kelvin ',
+
   async execute(senderId, args, pageAccessToken, sendMessage) {
-    sendMessage(senderId, { text: "⚙ 𝗙𝗲𝘁𝗰𝗵𝗶𝗻𝗴 𝗮 𝗿𝗮𝗻𝗱𝗼𝗺 𝗮𝗻𝗶𝗺𝗲 𝗾𝘂𝗼𝘁𝗲..." }, pageAccessToken);
+
+    // Message de chargement
+    await sendMessage(senderId, { text: "⚙ 𝗙𝗲𝘁𝗰𝗵𝗶𝗻𝗴 𝗮 𝗿𝗮𝗻𝗱𝗼𝗺 𝗮𝗻𝗶𝗺𝗲 𝗾𝘂𝗼𝘁𝗲..." }, pageAccessToken);
 
     try {
-      const response = await axios.get('https://h-anime-quote-api.vercel.app/anime-quote');
-      const quoteData = response.data.data;
+      // ---------------------------
+      // 1) Nouvelle API pour la quote
+      // ---------------------------
+      const quoteRes = await axios.get("https://animechan.xyz/api/random");
+      const data = quoteRes.data;
 
-      const anime = quoteData.anime.name;
-      const character = quoteData.character.name;
-      const quote = quoteData.content;
+      const anime = data.anime;
+      const character = data.character;
+      const quote = data.quote;
 
-      if (!quote || !anime || !character) {
-        return sendMessage(senderId, { text: "🥺 𝗦𝗼𝗿𝗿𝘆, 𝗜 𝗰𝗼𝘂𝗹𝗱𝗻'𝘁 𝗳𝗶𝗻𝗱 𝗮𝗻 𝗮𝗻𝗶𝗺𝗲 𝗾𝘂𝗼𝘁𝗲." }, pageAccessToken);
+      // ---------------------------
+      // 2) API pour récupérer l’image du personnage
+      // ---------------------------
+      let imageURL = null;
+
+      try {
+        const imgRes = await axios.get(
+          `https://api.jikan.moe/v4/characters?q=${encodeURIComponent(character)}&limit=1`
+        );
+
+        if (imgRes.data.data && imgRes.data.data.length > 0) {
+          imageURL = imgRes.data.data[0].images.jpg.image_url;
+        }
+      } catch (imgErr) {
+        console.log("❌ Impossible de récupérer l'image du personnage:", imgErr.message);
       }
 
-      sendMessage(senderId, { 
-        text: `📝: 𝗔𝗻𝗶𝗺𝗲 𝗤𝘂𝗼𝘁𝗲\n\n 🖋️: "${quote}"\n\n👤: ${character} (${anime})` 
-      }, pageAccessToken);
+      // ---------------------------
+      // 3) Envoi du message + image
+      // ---------------------------
+      await sendMessage(
+        senderId,
+        {
+          text: `📝 𝗔𝗻𝗶𝗺𝗲 𝗤𝘂𝗼𝘁𝗲\n\n"🌟 ${quote}"\n\n👤 ${character}\n📺 Anime : ${anime}`
+        },
+        pageAccessToken
+      );
+
+      if (imageURL) {
+        await sendMessage(
+          senderId,
+          {
+            attachment: {
+              type: "image",
+              payload: { url: imageURL }
+            }
+          },
+          pageAccessToken
+        );
+      } else {
+        await sendMessage(
+          senderId,
+          { text: "⚠️ Aucune image disponible pour ce personnage." },
+          pageAccessToken
+        );
+      }
+
     } catch (error) {
       console.error(error);
-      sendMessage(senderId, { text: `❌ 𝗔𝗻 𝗲𝗿𝗿𝗼𝗿 𝗼𝗰𝗰𝘂𝗿𝗿𝗲𝗱: ${error.message}` }, pageAccessToken);
+      sendMessage(
+        senderId,
+        { text: `❌ Une erreur est survenue: ${error.message}` },
+        pageAccessToken
+      );
     }
   }
 };
