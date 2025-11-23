@@ -15,72 +15,61 @@ const apiKeys = [
 
 const getRandomKey = () => apiKeys[Math.floor(Math.random() * apiKeys.length)];
 
-module.exports = {
-  name: 'alldl',
-  description: 'Auto video downloader for TikTok, Facebook, YouTube, Instagram, Twitter, etc.',
-  author: 'kelvin',
+module.exports = async function autoDownloader(senderId, message, pageAccessToken) {
 
-  async execute(senderId, args, pageAccessToken) {
-    const url = args.join(' ').trim();
+  const url = message.trim();
 
-    // 🔥 AUTO DETECTION (YouTube, TikTok, FB, IG, X)
-    const supported = /(tiktok\.com|facebook\.com|fb\.watch|youtube\.com|youtu\.be|instagram\.com|x\.com|twitter\.com)/i;
-    if (!supported.test(url)) return; // ignore si ce n’est pas un lien
-
-    await sendMessage(senderId, { text: "⏳ Downloading your video...\nPlease wait..." }, pageAccessToken);
-
-    let response;
-    let attempts = 0;
-    const triedKeys = new Set();
-
-    while (attempts < apiKeys.length) {
-      const apiKey = getRandomKey();
-      if (triedKeys.has(apiKey)) continue;
-      triedKeys.add(apiKey);
-
-      const options = {
-        method: 'POST',
-        url: 'https://social-download-all-in-one.p.rapidapi.com/v1/social/autolink',
-        headers: {
-          'x-rapidapi-key': apiKey,
-          'x-rapidapi-host': 'social-download-all-in-one.p.rapidapi.com',
-          'Content-Type': 'application/json'
-        },
-        data: { url }
-      };
-
-      try {
-        response = await axios.request(options);
-        if (response.data.medias) break;
-      } catch (error) {
-        console.warn(`Failed with API key ${apiKey}: ${error.message}`);
-      }
-      attempts++;
-    }
-
-    if (!response || !response.data.medias) {
-      return sendMessage(senderId, { text: '❌ Could not download this link.' }, pageAccessToken);
-    }
-
-    const media =
-      response.data.medias.find(m => m.type === 'video' && m.quality === 'HD') ||
-      response.data.medias[0];
-
-    if (!media) {
-      return sendMessage(senderId, { text: '❌ No downloadable video found.' }, pageAccessToken);
-    }
-
-    const videoUrl = media.url;
-
-    return sendMessage(
-      senderId,
-      {
-        attachment: {
-          type: 'video',
-          payload: { url: videoUrl }
-        }
-      },
-      pageAccessToken
-    );
+  // --- détection automatique des liens ---
+  if (!url.match(/(tiktok\.com|fb\.watch|facebook\.com|youtube\.com|youtu\.be|instagram\.com)/i)) {
+    return; // pas un lien social → on ignore
   }
+
+  let response;
+  let attempts = 0;
+  const triedKeys = new Set();
+
+  while (attempts < apiKeys.length) {
+    const apiKey = getRandomKey();
+    if (triedKeys.has(apiKey)) continue;
+    triedKeys.add(apiKey);
+
+    const options = {
+      method: 'POST',
+      url: 'https://social-download-all-in-one.p.rapidapi.com/v1/social/autolink',
+      headers: {
+        'x-rapidapi-key': apiKey,
+        'x-rapidapi-host': 'social-download-all-in-one.p.rapidapi.com',
+        'Content-Type': 'application/json'
+      },
+      data: { url }
+    };
+
+    try {
+      response = await axios.request(options);
+      if (response.data.medias) break;
+    } catch (error) {
+      console.warn(`API Key failed ${apiKey}: ${error.message}`);
+    }
+    attempts++;
+  }
+
+  if (!response || !response.data.medias) {
+    return sendMessage(senderId, { text: '❌ Impossible de télécharger la vidéo.' }, pageAccessToken);
+  }
+
+  const media = response.data.medias.find(m => m.type === 'video' && m.quality === 'HD') 
+              || response.data.medias[0];
+
+  if (!media) {
+    return sendMessage(senderId, { text: '❌ Aucune vidéo trouvée.' }, pageAccessToken);
+  }
+
+  const videoUrl = media.url;
+
+  await sendMessage(senderId, {
+    attachment: {
+      type: 'video',
+      payload: { url: videoUrl }
+    }
+  }, pageAccessToken);
 };
