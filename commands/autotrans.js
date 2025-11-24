@@ -1,57 +1,66 @@
 const axios = require("axios");
 
-let autoTranslateState = {
-    enabled: false,
-    targetLang: "en"
-};
+// Mémoire interne (par user)
+const autoState = {}; 
+// Exemple : autoState[senderId] = { enabled: true, lang: "en" }
 
 module.exports = {
-    name: "autotrans",
-
+    name: "autotranslate",
+    description: "Activer/désactiver la traduction automatique",
+    
     async execute(senderId, args, pageAccessToken, event, sendMessage) {
-        const state = args[0];
-        const lang = args[1];
-
-        if (!state) {
-            return sendMessage(senderId, { text: "Usage : autotrans <on/off> <lang>" }, pageAccessToken);
+        if (!args[0]) {
+            return sendMessage(senderId, { 
+                text: "❗ Usage :\n- autotranslate on en\n- autotranslate on fr\n- autotranslate off" 
+            }, pageAccessToken);
         }
 
-        if (state === "on") {
+        const action = args[0].toLowerCase();
+        const lang = args[1]?.toLowerCase() || null;
+
+        // Désactivation
+        if (action === "off") {
+            delete autoState[senderId];
+            return sendMessage(senderId, { text: "🛑 Auto-traduction désactivée." }, pageAccessToken);
+        }
+
+        // Activation
+        if (action === "on") {
             if (!lang) {
-                return sendMessage(senderId, { text: "Tu dois ajouter une langue : ex. autotrans on en" }, pageAccessToken);
+                return sendMessage(senderId, { text: "⚠️ Vous devez préciser une langue. Exemple : autotranslate on en" }, pageAccessToken);
             }
 
-            autoTranslateState.enabled = true;
-            autoTranslateState.targetLang = lang;
-
-            return sendMessage(senderId, { text: `🌍 Auto-traduction activée → ${lang}` }, pageAccessToken);
+            autoState[senderId] = { enabled: true, lang };
+            return sendMessage(senderId, { 
+                text: `✅ Auto-traduction activée vers : **${lang}**` 
+            }, pageAccessToken);
         }
 
-        if (state === "off") {
-            autoTranslateState.enabled = false;
-            return sendMessage(senderId, { text: "❌ Auto-traduction désactivée." }, pageAccessToken);
-        }
-
-        return sendMessage(senderId, { text: "Commande invalide." }, pageAccessToken);
+        return sendMessage(senderId, { text: "❌ Commande invalide." }, pageAccessToken);
     },
 
-    // 🔥 Fonction auto appelée dans handleMessage
-    async auto(senderId, message, pageAccessToken, sendMessage) {
-        if (!autoTranslateState.enabled) return;
+    // Fonction AUTO appelée dans handleMessage()
+    async auto(senderId, text, pageAccessToken, sendMessage) {
+        const state = autoState[senderId];
+        if (!state || !state.enabled) return; // ❌ pas activé pour cet utilisateur
+        
+        // Ne pas traduire une commande (-help, -ai...)
+        if (text.startsWith("-")) return;
 
+        // Traduction automatique
         try {
-            const res = await axios.get(
-                `https://api.mymemory.translated.net/get?q=${encodeURIComponent(message)}&langpair=auto|${autoTranslateState.targetLang}`
-            );
+            const url = `https://miko-utilis.vercel.app/api/translate?to=${state.lang}&text=${encodeURIComponent(text)}`;
+            const response = await axios.get(url);
 
-            const translated = res.data.responseData.translatedText;
+            const translated = response.data?.translated_text?.translated;
+            if (!translated) return;
 
-            await sendMessage(senderId, {
-                text: `🔄 Traduction (${autoTranslateState.targetLang}) :\n${translated}`
+            await sendMessage(senderId, { 
+                text: `🌍 **Traduction (${state.lang}) :**\n${translated}` 
             }, pageAccessToken);
 
         } catch (e) {
-            console.error("Translation error:", e);
+            console.error("AutoTranslate error:", e.message);
         }
     }
 };
