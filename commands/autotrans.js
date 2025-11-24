@@ -1,90 +1,57 @@
 const axios = require("axios");
 
-// Mémoire locale : langue activée par utilisateur
-// { userId: "fr", userId2: "en" }
-const autoTranslateState = {};
+let autoTranslateState = {
+    enabled: false,
+    targetLang: "en"
+};
 
 module.exports = {
-  name: "autotrans",
-  description: "Automatically translate all messages into a chosen language.",
-  author: "coffee",
+    name: "autotrans",
 
-  async execute(senderId, args, pageAccessToken, event, sendMessage) {
-    const option = args[0];
-    const lang = args[1];
+    async execute(senderId, args, pageAccessToken, event, sendMessage) {
+        const state = args[0];
+        const lang = args[1];
 
-    if (!option) {
-      return sendMessage(
-        senderId,
-        { text: "Usage: auto translate <on/off> <lang>\nEx: auto translate on en" },
-        pageAccessToken
-      );
+        if (!state) {
+            return sendMessage(senderId, { text: "Usage : autotrans <on/off> <lang>" }, pageAccessToken);
+        }
+
+        if (state === "on") {
+            if (!lang) {
+                return sendMessage(senderId, { text: "Tu dois ajouter une langue : ex. autotrans on en" }, pageAccessToken);
+            }
+
+            autoTranslateState.enabled = true;
+            autoTranslateState.targetLang = lang;
+
+            return sendMessage(senderId, { text: `🌍 Auto-traduction activée → ${lang}` }, pageAccessToken);
+        }
+
+        if (state === "off") {
+            autoTranslateState.enabled = false;
+            return sendMessage(senderId, { text: "❌ Auto-traduction désactivée." }, pageAccessToken);
+        }
+
+        return sendMessage(senderId, { text: "Commande invalide." }, pageAccessToken);
+    },
+
+    // 🔥 Fonction auto appelée dans handleMessage
+    async auto(senderId, message, pageAccessToken, sendMessage) {
+        if (!autoTranslateState.enabled) return;
+
+        try {
+            const res = await axios.get(
+                `https://api.mymemory.translated.net/get?q=${encodeURIComponent(message)}&langpair=auto|${autoTranslateState.targetLang}`
+            );
+
+            const translated = res.data.responseData.translatedText;
+
+            await sendMessage(senderId, {
+                text: `🔄 Traduction (${autoTranslateState.targetLang}) :\n${translated}`
+            }, pageAccessToken);
+
+        } catch (e) {
+            console.error("Translation error:", e);
+        }
     }
-
-    // ====== ACTIVER ======
-    if (option.toLowerCase() === "on") {
-      if (!lang)
-        return sendMessage(
-          senderId,
-          { text: "❗ Choisis une langue. Exemple : auto translate on en" },
-          pageAccessToken
-        );
-
-      autoTranslateState[senderId] = lang.toLowerCase();
-
-      return sendMessage(
-        senderId,
-        {
-          text: `✅ Auto-translation activée.\n📌 Langue cible : *${lang.toUpperCase()}*`
-        },
-        pageAccessToken
-      );
-    }
-
-    // ====== DÉSACTIVER ======
-    if (option.toLowerCase() === "off") {
-      delete autoTranslateState[senderId];
-
-      return sendMessage(
-        senderId,
-        { text: "🛑 Auto-translation désactivée." },
-        pageAccessToken
-      );
-    }
-
-    // Mauvaise syntaxe
-    return sendMessage(
-      senderId,
-      { text: "Usage: auto translate <on/off> <lang>" },
-      pageAccessToken
-    );
-  },
-
-  // Fonction appelée automatiquement dans handleMessage
-  async auto(senderId, text, pageAccessToken, sendMessage) {
-    const lang = autoTranslateState[senderId];
-    if (!lang) return; // pas activé → on ignore
-
-    try {
-      const url = `https://miko-utilis.vercel.app/api/translate?to=${lang}&text=${encodeURIComponent(
-        text
-      )}`;
-
-      const res = await axios.get(url);
-      const translated = res.data.translated_text.translated;
-
-      await sendMessage(
-        senderId,
-        { text: `🌐 *Translated (${lang}):*\n${translated}` },
-        pageAccessToken
-      );
-    } catch (err) {
-      console.error("Auto translate error:", err.message);
-      await sendMessage(
-        senderId,
-        { text: "❌ Erreur lors de la traduction automatique." },
-        pageAccessToken
-      );
-    }
-  }
 };
