@@ -34,11 +34,11 @@ async function handleMessage(event, pageAccessToken) {
     }
   }
 
-  // 🌍 ✅ AUTO-TRADUCTION (Ton code ajouté ici)
-  const autoTranslate = commands.get("autotranslate");
-  if (autoTranslate && autoTranslate.auto) {
-      await autoTranslate.auto(senderId, messageText, pageAccessToken, sendMessage);
-  }
+ // 🌍 AUTO-TRADUCTION
+const autoTranslate = commands.get("autotranslate");
+if (autoTranslate && autoTranslate.auto) {
+    await autoTranslate.auto(senderId, messageText, pageAccessToken, sendMessage);
+}
 
   // ↓ System normal de commandes
   const [commandName, ...args] = messageText.startsWith(prefix)
