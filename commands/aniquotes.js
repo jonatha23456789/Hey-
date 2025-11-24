@@ -3,17 +3,13 @@ const axios = require('axios');
 module.exports = {
   name: 'aniquotes',
   description: 'Fetch a random anime quote with character image',
-  author: 'kelvin ',
+  author: 'coffee',
 
-  async execute(senderId, args, pageAccessToken, sendMessage) {
-
-    // Message de chargement
-    await sendMessage(senderId, { text: "⚙ 𝗙𝗲𝘁𝗰𝗵𝗶𝗻𝗴 𝗮 𝗿𝗮𝗻𝗱𝗼𝗺 𝗮𝗻𝗶𝗺𝗲 𝗾𝘂𝗼𝘁𝗲..." }, pageAccessToken);
+  async execute(senderId, args, pageAccessToken, event, sendMessage) {
+    await sendMessage(senderId, { text: "⚙ Fetching a random anime quote..." }, pageAccessToken);
 
     try {
-      // ---------------------------
-      // 1) Nouvelle API pour la quote
-      // ---------------------------
+      // 1) Fetch quote
       const quoteRes = await axios.get("https://animechan.xyz/api/random");
       const data = quoteRes.data;
 
@@ -21,11 +17,8 @@ module.exports = {
       const character = data.character;
       const quote = data.quote;
 
-      // ---------------------------
-      // 2) API pour récupérer l’image du personnage
-      // ---------------------------
+      // 2) Fetch character image
       let imageURL = null;
-
       try {
         const imgRes = await axios.get(
           `https://api.jikan.moe/v4/characters?q=${encodeURIComponent(character)}&limit=1`
@@ -35,20 +28,19 @@ module.exports = {
           imageURL = imgRes.data.data[0].images.jpg.image_url;
         }
       } catch (imgErr) {
-        console.log("❌ Impossible de récupérer l'image du personnage:", imgErr.message);
+        console.log("Image fetch failed:", imgErr.message);
       }
 
-      // ---------------------------
-      // 3) Envoi du message + image
-      // ---------------------------
+      // 3) Send text
       await sendMessage(
         senderId,
         {
-          text: `📝 𝗔𝗻𝗶𝗺𝗲 𝗤𝘂𝗼𝘁𝗲\n\n"🌟 ${quote}"\n\n👤 ${character}\n📺 Anime : ${anime}`
+          text: `📝 Anime Quote\n\n"${quote}"\n\n👤 ${character}\n📺 Anime : ${anime}`
         },
         pageAccessToken
       );
 
+      // 4) Send image
       if (imageURL) {
         await sendMessage(
           senderId,
@@ -63,16 +55,16 @@ module.exports = {
       } else {
         await sendMessage(
           senderId,
-          { text: "⚠️ Aucune image disponible pour ce personnage." },
+          { text: "⚠ Aucune image trouvée pour ce personnage." },
           pageAccessToken
         );
       }
 
     } catch (error) {
       console.error(error);
-      sendMessage(
+      await sendMessage(
         senderId,
-        { text: `❌ Une erreur est survenue: ${error.message}` },
+        { text: `❌ Error: ${error.message}` },
         pageAccessToken
       );
     }
