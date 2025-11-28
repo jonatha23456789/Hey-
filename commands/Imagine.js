@@ -3,7 +3,7 @@ const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
   name: 'imagine',
-  description: 'Create an AI image using Nekolabs API (custom ratio supported).',
+  description: 'Create an AI image using Nekolabs API 4.0-fast (custom ratio supported).',
   usage: '-imagine <prompt> [ratio]',
   author: 'kelvin',
 
@@ -16,16 +16,19 @@ module.exports = {
       );
     }
 
-    // Extraction du ratio à la fin du message
+    // Detect ratio at end of prompt
     let ratio = '1:1';
     const lastArg = args[args.length - 1];
+
     if (/^\d+:\d+$/.test(lastArg)) {
       ratio = lastArg;
-      args.pop(); // Retire le ratio du prompt
+      args.pop();
     }
 
     const prompt = args.join(' ').trim();
-    const apiUrl = `https://api.nekolabs.web.id/ai/imagen/4?prompt=${encodeURIComponent(prompt)}&ratio=${encodeURIComponent(ratio)}`;
+
+    // ✅ NEW API URL
+    const apiUrl = `https://api.nekolabs.web.id/image-generation/imagen/4.0-fast?prompt=${encodeURIComponent(prompt)}&ratio=${encodeURIComponent(ratio)}`;
 
     try {
       const { data } = await axios.get(apiUrl);
@@ -38,7 +41,7 @@ module.exports = {
         );
       }
 
-      // Envoi du message texte avant l’image
+      // Send the text message before the image
       await sendMessage(
         senderId,
         {
@@ -47,7 +50,7 @@ module.exports = {
         pageAccessToken
       );
 
-      // Envoi de l’image générée
+      // Send the generated image
       await sendMessage(
         senderId,
         {
