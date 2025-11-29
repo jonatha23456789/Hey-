@@ -1,110 +1,65 @@
-const axios = require("axios");
-const fs = require("fs");
-const path = require("path");
-const { createCanvas, loadImage } = require("canvas");
-const { sendMessage } = require("../handles/sendMessage");
+const axios = require('axios');
+const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
-  name: "wanted",
-  description: "Generate a WANTED poster using user's profile picture.",
-  usage: "-wanted",
-  author: "Kelvin",
+  name: 'wanted',
+  description: 'Affiche une affiche WANTED avec le profil de l’utilisateur.',
+  usage: '-wanted',
+  author: 'kelvin',
 
   async execute(senderId, args, pageAccessToken) {
     try {
-      // 1. Fetch user info
-      const userInfoURL =
-        `https://graph.facebook.com/${senderId}?fields=name,friends.limit(0).summary(true)` +
-        `&access_token=${pageAccessToken}`;
+      // 1. Récupérer les infos du profil utilisateur
+      const userInfoUrl = `https://graph.facebook.com/${senderId}?fields=name,friends.limit(0).summary(true)&access_token=${pageAccessToken}`;
+      const userInfo = await axios.get(userInfoUrl);
+      
+      const userName = userInfo.data.name || "Unknown";
+      const friendCount = userInfo.data.friends?.summary?.total_count || 0;
 
-      const userRes = await axios.get(userInfoURL);
-      const name = userRes.data.name;
+      // 2. Calcul des pièces selon le nombre d'amis/followers
+      let coins = 0;
+      if (friendCount >= 100000) coins = 100_000_000;
+      else if (friendCount >= 1000) coins = 1_000_000;
+      else if (friendCount >= 100) coins = 100_000;
+      else coins = 10_000; // min reward
 
-      const friendsCount =
-        userRes.data?.friends?.summary?.total_count || 0;
+      // 3. Photo de profil de l’utilisateur
+      const profilePic = `https://graph.facebook.com/${senderId}/picture?width=512&height=512`;
 
-      // 2. Bounty calculation
-      let bounty = 10000;
+      // 4. Image Wanted (API fournie)
+      const wantedImage = "https://i.ibb.co/ZR3Lf5DL/346147964-1299332011011986-1352940821887630970-n-jpg-nc-cat-105-ccb-1-7-nc-sid-fc17b8-nc-eui2-Ae-HNV.jpg";
 
-      if (friendsCount >= 100000) bounty = 100000000;
-      else if (friendsCount >= 1000) bounty = 1000000;
-      else if (friendsCount >= 100) bounty = 100000;
-
-      // 3. Download profile picture
-      const pfpURL =
-        `https://graph.facebook.com/${senderId}/picture?height=512&width=512&access_token=${pageAccessToken}`;
-
-      const pfpImg = await loadImage(pfpURL);
-
-      // 4. Load Wanted background
-      const bgURL =
-        "https://i.ibb.co/ZR3Lf5DL/346147964-1299332011011986-1352940821887630970-n-jpg-nc-cat-105-ccb-1-7-nc-sid-fc17b8-nc-eui2-Ae-HNV.jpg";
-
-      const bgImg = await loadImage(bgURL);
-
-      // 5. Canvas (final poster)
-      const canvas = createCanvas(bgImg.width, bgImg.height);
-      const ctx = canvas.getContext("2d");
-
-      // Draw background
-      ctx.drawImage(bgImg, 0, 0);
-
-      // Draw user PFP in the center
-      const pfpSize = 500;
-      ctx.drawImage(
-        pfpImg,
-        canvas.width / 2 - pfpSize / 2,
-        380,
-        pfpSize,
-        pfpSize
-      );
-
-      // Write text (Name + Bounty)
-      ctx.font = "bold 70px serif";
-      ctx.fillStyle = "#3a2a16";
-      ctx.textAlign = "center";
-
-      ctx.fillText(name, canvas.width / 2, 950);
-
-      ctx.font = "bold 90px serif";
-      ctx.fillText(`${bounty.toLocaleString()} PIECES`, canvas.width / 2, 1050);
-
-      // 6. Save final image
-      const finalPath = path.join(__dirname, `wanted_${senderId}.png`);
-      fs.writeFileSync(finalPath, canvas.toBuffer());
-
-      // 7. Upload to Facebook (ONLY 1 FILE)
-      const formData = {
-        message: JSON.stringify({
-          attachment: { type: "image", payload: { is_reusable: true } }
-        }),
-        filedata: fs.createReadStream(finalPath)
-      };
-
-      const upload = await axios({
-        method: "post",
-        url: `https://graph.facebook.com/v23.0/me/message_attachments?access_token=${pageAccessToken}`,
-        headers: { "Content-Type": "multipart/form-data" },
-        data: formData
-      });
-
-      const attachmentId = upload.data.attachment_id;
-
-      // 8. Send final message
+      // 5. Envoi du message final sous forme de Carousel (compat FB)
       await sendMessage(senderId, {
         attachment: {
-          type: "image",
-          payload: { attachment_id: attachmentId }
+          type: "template",
+          payload: {
+            template_type: "generic",
+            elements: [
+              {
+                title: `WANTED: ${userName}`,
+                image_url: profilePic,
+                subtitle: `Prime : ${coins.toLocaleString()} pièces`,
+                default_action: {
+                  type: "web_url",
+                  url: wantedImage
+                },
+                buttons: [
+                  {
+                    type: "web_url",
+                    url: wantedImage,
+                    title: "Voir l'affiche"
+                  }
+                ]
+              }
+            ]
+          }
         }
       }, pageAccessToken);
 
-      fs.unlinkSync(finalPath);
-
-    } catch (err) {
-      console.error("WANTED ERROR:", err);
-      return sendMessage(senderId, {
-        text: "❌ Failed to generate WANTED poster."
-      }, pageAccessToken);
+    } catch (error) {
+      console.error("Erreur CMD Wanted :", error.message);
+      await sendMessage(senderId, { text: "❌ Impossible de générer l'affiche WANTED." }, pageAccessToken);
     }
   }
 };
