@@ -1,79 +1,59 @@
-const axios = require("axios");
-const fs = require("fs");
-const path = require("path");
-const { sendMessage } = require("../handles/sendMessage");
+const axios = require('axios');
+const path = require('path');
 
-module.exports = {
-  name: "wanted",
-  description: "Create a One Piece Wanted poster of a user.",
-  usage: "-wanted [tag|reply|none]",
-  author: "kelvin",
+// Helper function for POST requests
+const axiosPost = (url, data, params = {}) => axios.post(url, data, { params }).then(res => res.data);
 
-  async execute(senderId, args, pageAccessToken, event) {
-    try {
+// Send a message with typing indicators
+const sendMessage = async (senderId, { text = '', attachment = null }, pageAccessToken) => {
+  if (!text && !attachment) return;
 
-      // 1️⃣ Identification de l'utilisateur ciblé
-      let targetId = senderId;
+  const url = `https://graph.facebook.com/v22.0/me/messages`;
+  const params = { access_token: pageAccessToken };
 
-      if (event?.messageReply?.senderID) {
-        targetId = event.messageReply.senderID;
-      }
+  try {
+    // Turn on typing indicator
+    await axiosPost(url, { recipient: { id: senderId }, sender_action: "typing_on" }, params);
 
-      if (event?.mentions && Object.keys(event.mentions).length > 0) {
-        targetId = Object.keys(event.mentions)[0];
-      }
+    // Prepare message payload based on content
+    const messagePayload = {
+      recipient: { id: senderId },
+      message: {}
+    };
 
-      // 2️⃣ URL avatar FB
-      const avatarUrl = `https://graph.facebook.com/${targetId}/picture?width=512&height=512`;
-
-      // 3️⃣ API Wanted
-      const apiUrl = `https://api.nekolabs.web.id/canvas/wanted?image=${encodeURIComponent(avatarUrl)}`;
-
-      const img = await axios.get(apiUrl, { responseType: "arraybuffer" });
-
-      // 4️⃣ Sauvegarde temporaire
-      const filePath = path.join(__dirname, "wanted.png");
-      fs.writeFileSync(filePath, img.data);
-
-      // 5️⃣ UPLOAD VERS FACEBOOK pour obtenir un attachment_id
-      const formData = new FormData();
-      formData.append("message", JSON.stringify({
-        attachment: { type: "image", payload: { is_reusable: true } }
-      }));
-      formData.append("filedata", fs.createReadStream(filePath));
-
-      const uploadRes = await axios.post(
-        `https://graph.facebook.com/v23.0/me/message_attachments?access_token=${pageAccessToken}`,
-        formData,
-        { headers: formData.getHeaders() }
-      );
-
-      const attachmentId = uploadRes.data.attachment_id;
-
-      // 6️⃣ Envoi au chat
-      await axios.post(
-        `https://graph.facebook.com/v23.0/me/messages?access_token=${pageAccessToken}`,
-        {
-          recipient: { id: senderId },
-          message: {
-            attachment: {
-              type: "image",
-              payload: { attachment_id: attachmentId }
-            }
-          }
-        }
-      );
-
-      fs.unlinkSync(filePath);
-
-    } catch (err) {
-      console.log("Wanted error:", err.response?.data || err.message);
-
-      sendMessage(
-        senderId,
-        { text: "❌ Impossible de générer le poster WANTED." },
-        pageAccessToken
-      );
+    if (text) {
+      messagePayload.message.text = text;
     }
+
+    if (attachment) {
+      if (attachment.type === 'template') {
+        // Use payload directly for template type
+        messagePayload.message.attachment = {
+          type: 'template',
+          payload: attachment.payload
+        };
+      } else {
+        // For other types (audio, image, etc.)
+        messagePayload.message.attachment = {
+          type: attachment.type,
+          payload: {
+            url: attachment.payload.url,
+            is_reusable: true
+          }
+        };
+      }
+    }
+
+    // Send the message
+    await axiosPost(url, messagePayload, params);
+
+    // Turn off typing indicator
+    await axiosPost(url, { recipient: { id: senderId }, sender_action: "typing_off" }, params);
+
+  } catch (e) {
+    const errorMessage = e.response?.data?.error?.message || e.message;
+    console.error(`Error in ${path.basename(__filename)}: ${errorMessage}`);
   }
 };
+
+module.exports = { sendMessage };
