@@ -1,79 +1,52 @@
 const axios = require("axios");
-const fs = require("fs");
-const path = require("path");
-const { sendMessage } = require("../handles/sendMessage");
+const { sendMessage } = require("./sendMessage");
 
-module.exports = {
-  name: "wanted",
-  description: "Create a One Piece Wanted poster of a user.",
-  usage: "-wanted [tag|reply|none]",
-  author: "kelvin",
+// FORMATTER LES PIECES
+function formatCoins(followers) {
+  if (followers >= 100000) return "100,000,000 pièces";
+  if (followers >= 1000) return "1,000,000 pièces";
+  if (followers >= 100) return "100,000 pièces";
+  return "10,000 pièces";
+}
 
-  async execute(senderId, args, pageAccessToken, event) {
-    try {
+module.exports = async (senderId, user, pageAccessToken) => {
+  try {
 
-      // 1️⃣ Identification de l'utilisateur ciblé
-      let targetId = senderId;
+    // user.photo = URL photo FB
+    // user.name = Nom utilisateur
+    // user.followers = nombre d'amis / followers
+    const wantedTemplate = "https://i.ibb.co/ZR3Lf5DL/346147964-1299332011011986-1352940821887630970-n-jpg-nc-cat-105-ccb-1-7-nc-sid-fc17b8-nc-eui2-Ae-HNV.jpg";
 
-      if (event?.messageReply?.senderID) {
-        targetId = event.messageReply.senderID;
-      }
+    const coins = formatCoins(user.followers);
 
-      if (event?.mentions && Object.keys(event.mentions).length > 0) {
-        targetId = Object.keys(event.mentions)[0];
-      }
-
-      // 2️⃣ URL avatar FB
-      const avatarUrl = `https://graph.facebook.com/${targetId}/picture?width=512&height=512`;
-
-      // 3️⃣ API Wanted
-      const apiUrl = `https://api.nekolabs.web.id/canvas/wanted?image=${encodeURIComponent(avatarUrl)}`;
-
-      const img = await axios.get(apiUrl, { responseType: "arraybuffer" });
-
-      // 4️⃣ Sauvegarde temporaire
-      const filePath = path.join(__dirname, "wanted.png");
-      fs.writeFileSync(filePath, img.data);
-
-      // 5️⃣ UPLOAD VERS FACEBOOK pour obtenir un attachment_id
-      const formData = new FormData();
-      formData.append("message", JSON.stringify({
-        attachment: { type: "image", payload: { is_reusable: true } }
-      }));
-      formData.append("filedata", fs.createReadStream(filePath));
-
-      const uploadRes = await axios.post(
-        `https://graph.facebook.com/v23.0/me/message_attachments?access_token=${pageAccessToken}`,
-        formData,
-        { headers: formData.getHeaders() }
-      );
-
-      const attachmentId = uploadRes.data.attachment_id;
-
-      // 6️⃣ Envoi au chat
-      await axios.post(
-        `https://graph.facebook.com/v23.0/me/messages?access_token=${pageAccessToken}`,
-        {
-          recipient: { id: senderId },
-          message: {
-            attachment: {
-              type: "image",
-              payload: { attachment_id: attachmentId }
+    // MESSAGE FINAL
+    await sendMessage(senderId, {
+      attachment: {
+        type: "template",
+        payload: {
+          template_type: "generic",
+          elements: [
+            {
+              title: `🎯 WANTED : ${user.name}`,
+              image_url: wantedTemplate,
+              subtitle: `Prime : ${coins}\nFollowers : ${user.followers}`,
+              buttons: [
+                {
+                  type: "web_url",
+                  url: user.photo,
+                  title: "Voir la photo"
+                }
+              ]
             }
-          }
+          ]
         }
-      );
+      }
+    }, pageAccessToken);
 
-      fs.unlinkSync(filePath);
-
-    } catch (err) {
-      console.log("Wanted error:", err.response?.data || err.message);
-
-      sendMessage(
-        senderId,
-        { text: "❌ Impossible de générer le poster WANTED." },
-        pageAccessToken
-      );
-    }
+  } catch (err) {
+    console.error(err);
+    await sendMessage(senderId, {
+      text: "❌ Impossible de générer le poster WANTED."
+    }, pageAccessToken);
   }
 };
