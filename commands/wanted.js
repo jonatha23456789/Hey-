@@ -1,60 +1,66 @@
-const axios = require('axios');
-const { sendMessage } = require('../handles/sendMessage');
+const axios = require("axios");
+const fs = require("fs");
+const path = require("path");
+const { sendMessage } = require("../handles/sendMessage");
 
 module.exports = {
-  name: 'wanted',
-  description: 'Affiche un avis WANTED basé sur le profil utilisateur.',
-  usage: '-wanted',
-  author: 'kelvin',
+  name: "wanted",
+  description: "Generate a Wanted poster of a user",
+  usage: "-wanted [tag|reply|none]",
+  author: "kelvin",
 
-  async execute(senderId, args, pageAccessToken) {
+  async execute(senderId, args, pageAccessToken, event) {
     try {
+      // 1️⃣ Trouver l’ID cible
+      let targetId = senderId;
 
-      // 1. Info FB : nom + amis
-      const fbURL = `https://graph.facebook.com/${senderId}?fields=name,friends.limit(0).summary(true)&access_token=${pageAccessToken}`;
-      const user = await axios.get(fbURL);
-      const name = user.data.name || "Unknown";
-      const count = user.data.friends?.summary?.total_count || 0;
+      // si reply
+      if (event && event.messageReply) {
+        targetId = event.messageReply.senderID;
+      }
 
-      // 2. Calcul des pièces
-      let coins = 10000;
-      if (count >= 100000) coins = 100_000_000;
-      else if (count >= 1000) coins = 1_000_000;
-      else if (count >= 100) coins = 100_000;
+      // si mention
+      if (event && event.mentions && Object.keys(event.mentions).length > 0) {
+        targetId = Object.keys(event.mentions)[0];
+      }
 
-      // 3. Image Wanted (ta photo)
-      const wantedFrame = "https://i.ibb.co/ZR3Lf5DL/346147964-1299332011011986-1352940821887630970-n-jpg-nc-cat-105-ccb-1-7-nc-sid-fc17b8-nc-eui2-Ae-HNV.jpg";
+      // 2️⃣ Récup PP Facebook (512px)
+      const avatar = `https://graph.facebook.com/${targetId}/picture?width=512&height=512`;
 
-      // 4. Photo de profil FB
-      const pfp = `https://graph.facebook.com/${senderId}/picture?width=512&height=512`;
+      // 3️⃣ API Wanted (style DIG)
+      const apiURL = `https://some-random-api.com/canvas/wanted?avatar=${encodeURIComponent(avatar)}`;
 
-      // 5. Envoi sous forme de carousel (100% compatible FB)
-      await sendMessage(senderId, {
-        attachment: {
-          type: "template",
-          payload: {
-            template_type: "generic",
-            elements: [
-              {
-                title: `WANTED: ${name}`,
-                image_url: wantedFrame,
-                subtitle: `Prime : ${coins.toLocaleString()} pièces`,
-                buttons: [
-                  {
-                    type: "web_url",
-                    url: pfp,
-                    title: "Voir la photo du criminel"
-                  }
-                ]
-              }
-            ]
+      // 4️⃣ Télécharger image finale
+      const img = await axios.get(apiURL, { responseType: "arraybuffer" });
+
+      const filePath = path.join(__dirname, "wanted.png");
+      fs.writeFileSync(filePath, img.data);
+
+      // 5️⃣ Envoyer à Facebook
+      await sendMessage(
+        senderId,
+        {
+          attachment: {
+            type: "image",
+            payload: {
+              is_reusable: true
+            }
           }
-        }
-      }, pageAccessToken);
+        },
+        pageAccessToken,
+        filePath
+      );
 
-    } catch (err) {
-      console.error("Wanted Error:", err.message);
-      return sendMessage(senderId, { text: "❌ Impossible d'afficher le WANTED." }, pageAccessToken);
+      // Supprimer fichier après upload
+      fs.unlinkSync(filePath);
+
+    } catch (error) {
+      console.log("WANTED ERROR:", error.message);
+      await sendMessage(
+        senderId,
+        { text: "❌ Impossible de générer le poster WANTED." },
+        pageAccessToken
+      );
     }
   }
 };
