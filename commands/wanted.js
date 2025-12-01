@@ -1,7 +1,7 @@
 const axios = require("axios");
 const { sendMessage } = require("./sendMessage");
 
-// FORMATER LES PIÈCES
+// FORMATTER LES PIÈCES
 function formatCoins(followers) {
   if (!followers || isNaN(followers)) return "10,000 pièces";
   if (followers >= 100000) return "100,000,000 pièces";
@@ -13,14 +13,14 @@ function formatCoins(followers) {
 module.exports = async (senderId, user, pageAccessToken) => {
   try {
 
-    // Vérification sécurité
+    // Vérification des données utilisateur
     if (!user || !user.name || !user.photo) {
       return await sendMessage(senderId, {
         text: "❌ Impossible de générer le poster WANTED (profil invalide)."
       }, pageAccessToken);
     }
 
-    // IMAGE TEMPLATE WANTED (lien direct sécurisé)
+    // 🔥 TON IMAGE VÉRITABLE WANTED
     const wantedTemplate =
       "https://i.ibb.co/ZR3Lf5DL/346147964-1299332011011986-1352940821887630970-n-jpg-nc-cat-105-ccb-1-7-nc-sid-fc17b8-nc-eui2-Ae-HNV.jpg";
 
