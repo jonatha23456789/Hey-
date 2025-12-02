@@ -1,81 +1,55 @@
-const axios = require("axios");
-const { sendMessage } = require("../handles/sendMessage");
-
-// Conversion followers/amies → prime
-function formatCoins(followers) {
-  if (followers >= 100000) return "100,000,000 pièces";
-  if (followers >= 1000) return "1,000,000 pièces";
-  if (followers >= 100) return "100,000 pièces";
-  return "10,000 pièces";
-}
+const DIG = require("discord-image-generation");
+const fs = require("fs-extra");
 
 module.exports = {
-  name: "wanted",
-  description: "Créer un poster WANTED pour un utilisateur.",
-  usage: "-wanted",
-  author: "kelvin",
+  config: {
+    name: "wanted",
+    version: "1.1",
+    author: "AmineDev",
+    countDown: 2,
+    role: 0,
+    shortDescription: "Génère un poster WANTED",
+    longDescription: "Crée un poster WANTED avec l'avatar de l'utilisateur",
+    category: "fun",
+    guide: "{pn} @tag ou {pn}"
+  },
 
-  async execute(senderId, args, pageAccessToken) {
+  onStart: async function ({ event, message, usersData }) {
     try {
 
-      // 1️⃣ Récupérer les infos de l’utilisateur depuis Facebook Graph API
-      const userInfo = await axios.get(
-        `https://graph.facebook.com/${senderId}`,
-        {
-          params: {
-            fields: "name,friends.limit(0).summary(true),picture.type(large)",
-            access_token: pageAccessToken,
-          }
-        }
-      );
+      // --- 1. Identifier l’utilisateur ciblé ---
+      let mention = Object.keys(event.mentions);
+      let uid;
 
-      const name = userInfo.data.name;
-      const followers =
-        userInfo.data.friends?.summary?.total_count || 0;
-      const photo = userInfo.data.picture?.data?.url;
+      if (event.type === "message_reply") {
+        uid = event.messageReply.senderID;
+      } else if (mention.length > 0) {
+        uid = mention[0];
+      } else {
+        uid = event.senderID;
+      }
 
-      const coins = formatCoins(followers);
+      // --- 2. Récupérer l’avatar ---
+      let url = await usersData.getAvatarUrl(uid);
+      if (!url) return message.reply("❌ Impossible de récupérer la photo de profil.");
 
-      // 2️⃣ Template Wanted (image fixe)
-      const wantedTemplate =
-        "https://i.ibb.co/ZR3Lf5DL/346147964-1299332011011986-1352940821887630970-n-jpg-nc-cat-105-ccb-1-7-nc-sid-fc17b8-nc-eui2-Ae-HNV.jpg";
+      // --- 3. Générer l’image WANTED avec DIG ---
+      let imgBuffer = await new DIG.Wanted().getImage(url);
 
-      // 3️⃣ Envoi du poster WANTED
-      await sendMessage(
-        senderId,
-        {
-          attachment: {
-            type: "template",
-            payload: {
-              template_type: "generic",
-              elements: [
-                {
-                  title: `🎯 WANTED : ${name}`,
-                  image_url: wantedTemplate,
-                  subtitle: `Prime : ${coins}\nFollowers : ${followers}`,
-                  buttons: [
-                    {
-                      type: "web_url",
-                      url: photo,
-                      title: "Voir la photo"
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        pageAccessToken
-      );
+      // --- 4. Sauvegarde temporaire ---
+      const pathSave = `${__dirname}/tmp/wanted_${uid}.png`;
+      fs.writeFileSync(pathSave, Buffer.from(imgBuffer));
+
+      // --- 5. Envoyer l’image ---
+      const username = event.mentions[uid] || "User";
+      message.reply({
+        body: `📜 WANTED POSTER\n👤 Cible : ${username}`,
+        attachment: fs.createReadStream(pathSave)
+      }, () => fs.unlinkSync(pathSave));
 
     } catch (err) {
-      console.error("WANTED ERROR:", err.response?.data || err);
-
-      await sendMessage(
-        senderId,
-        { text: "❌ Impossible de générer le poster WANTED." },
-        pageAccessToken
-      );
+      console.error(err);
+      message.reply("❌ Erreur lors de la création du poster WANTED.");
     }
   }
 };
