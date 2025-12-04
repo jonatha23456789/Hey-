@@ -1,85 +1,121 @@
 const axios = require('axios');
+const FormData = require('form-data');
 const { sendMessage } = require('../handles/sendMessage');
 
+// ============================
+// 🔥 CONFIG
+// ============================
+const IMGBB_API_KEY = "2ef14dcf2beb6dbe0c444790faed0cc0";
+
+// ============================
+// 🔤 Style Bold Custom
+// ============================
 function makeBold(text) {
-  // conservée si tu veux la réutiliser un jour, mais on NE L'APPLIQUE PAS
   return text.replace(/\*\*(.+?)\*\*/g, (match, word) => {
-    let boldText = '';
-    for (let i = 0; i < word.length; i++) {
-      const char = word[i];
-      if (char >= 'a' && char <= 'z') {
-        boldText += String.fromCharCode(char.charCodeAt(0) + 0x1D41A - 97);
-      } else if (char >= 'A' && char <= 'Z') {
-        boldText += String.fromCharCode(char.charCodeAt(0) + 0x1D400 - 65);
-      } else if (char >= '0' && char <= '9') {
-        boldText += String.fromCharCode(char.charCodeAt(0) + 0x1D7CE - 48);
-      } else {
-        boldText += char;
-      }
-    }
-    return boldText;
+    return `**${word}**`; // garder normal → plus de caractères "uniques"
   });
 }
 
+// ============================
+// 📌 Split long messages
+// ============================
 function splitMessage(text) {
   const maxLength = 1900;
   const chunks = [];
+
   for (let i = 0; i < text.length; i += maxLength) {
     chunks.push(text.slice(i, i + maxLength));
   }
+
   return chunks;
 }
 
+// ============================
+// 📤 Upload image to ImgBB
+// ============================
+async function uploadToImgBB(imageBuffer) {
+  const form = new FormData();
+  form.append("image", imageBuffer.toString("base64"));
+
+  const res = await axios.post(
+    `https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`,
+    form,
+    { headers: form.getHeaders() }
+  );
+
+  return res.data.data.url;
+}
+
+// ============================
+// 🤖 Command
+// ============================
 module.exports = {
   name: 'ai',
-  description: 'Chat with GPT-5 (Miko Utilis)',
-  usage: 'ai <message>',
+  description: 'Chat with GPT-5 + Image Analysis',
+  usage: 'ai [message] | ai <image>',
   author: 'coffee',
 
-  async execute(senderId, args, token) {
-    const message = args.join(' ') || 'Hello';
-    const header = '💬 | Anime Focus 𝙰𝚒\n・────────────・\n';
-    const footer = '\n・──── >ᴗ< ─────・';
+  async execute(senderId, args, token, event) {
+    const textQuery = args.join(" ").trim();
+    let imageURL = null;
+
+    // ============================
+    // 📸 If user sent an image
+    // ============================
+    if (event.messageReply && event.messageReply.attachments?.[0]?.type === "photo") {
+      try {
+        const img = event.messageReply.attachments[0].url;
+        const imgData = await axios.get(img, { responseType: "arraybuffer" });
+        imageURL = await uploadToImgBB(Buffer.from(imgData.data));
+      } catch (e) {
+        console.error("Image upload error:", e);
+      }
+    }
+
+    // ============================
+    // 🔥 Call GPT-5 API
+    // ============================
+    const header = "💬 | Anime Focus Ai\n・────────────・\n";
+    const footer = "\n・──── >ᴗ< ─────・";
 
     try {
-      // Appel API Miko GPT-5
-      const apiUrl = `https://miko-utilis.vercel.app/api/gpt5`;
-      const response = await axios.get(apiUrl, {
+      const response = await axios.get("https://miko-utilis.vercel.app/api/gpt5", {
         params: {
-          query: message,
-          userId: senderId
+          query: textQuery || "Salut",
+          userId: senderId,
+          imgurl: imageURL || "",
         }
       });
 
       if (!response.data || !response.data.status) {
-        throw new Error('API error');
+        throw new Error("API returned error");
       }
 
-      // Récupère la réponse texte
       let aiResponse = response.data.data.response;
-      aiResponse = aiResponse ? aiResponse.trim() : '';
 
-      // === IMPORTANT : on n'applique PAS makeBold ici ===
-      // aiResponse = makeBold(aiResponse); // <-- ligne supprimée / commentée
+      // Clean up + styling
+      aiResponse = aiResponse.trim();
+      aiResponse = makeBold(aiResponse);
 
-      // Découpage et envoi
-      const chunks = splitMessage(aiResponse || 'Désolé, pas de réponse.');
+      const chunks = splitMessage(aiResponse);
+
       for (let i = 0; i < chunks.length; i++) {
-        const isFirst = i === 0;
-        const isLast = i === chunks.length - 1;
+        let msg = chunks[i];
 
-        let fullMsg = chunks[i];
-        if (isFirst) fullMsg = header + fullMsg;
-        if (isLast) fullMsg = fullMsg + footer;
+        if (i === 0) msg = header + msg;
+        if (i === chunks.length - 1) msg = msg + footer;
 
-        await sendMessage(senderId, { text: fullMsg }, token);
+        await sendMessage(senderId, { text: msg }, token);
       }
 
-    } catch (err) {
-      console.error('AI command error:', err?.response?.data || err?.message || err);
-      await sendMessage(senderId, {
-        text: header + '❌ Something went wrong. Please try again.' + footer
-      }, token);
+    } catch (error) {
+      console.error(error);
+
+      await sendMessage(
+        senderId,
+        { text: header + "❌ Erreur lors du traitement.\nRéessaie." + footer },
+        token
+      );
     }
   }
 };
