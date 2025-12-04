@@ -23,18 +23,16 @@ function makeBold(text) {
 function splitMessage(text) {
   const maxLength = 1900;
   const chunks = [];
-
   for (let i = 0; i < text.length; i += maxLength) {
     chunks.push(text.slice(i, i + maxLength));
   }
-
   return chunks;
 }
 
 module.exports = {
   name: 'ai',
-  description: 'Chat with Grok AI',
-  usage: 'grok [message]',
+  description: 'Chat with GPT-5 (Miko Utilis)',
+  usage: 'ai <message>',
   author: 'coffee',
 
   async execute(senderId, args, token) {
@@ -43,15 +41,21 @@ module.exports = {
     const footer = '\n・──── >ᴗ< ─────・';
 
     try {
-      const response = await axios.get('https://rapido.zetsu.xyz/api/grok', {
-        params: { query: message }
+
+      // 🚀 API GPT5 (nouvelle)
+      const apiUrl = `https://miko-utilis.vercel.app/api/gpt5`;
+      const response = await axios.get(apiUrl, {
+        params: {
+          query: message,
+          userId: senderId
+        }
       });
 
       if (!response.data || !response.data.status) {
         throw new Error('API error');
       }
 
-      let aiResponse = response.data.response;
+      let aiResponse = response.data.data.response;
 
       aiResponse = aiResponse.trim();
       aiResponse = makeBold(aiResponse);
@@ -62,14 +66,14 @@ module.exports = {
         const isFirst = i === 0;
         const isLast = i === chunks.length - 1;
 
-        let fullMessage = chunks[i];
-        if (isFirst) fullMessage = header + fullMessage;
-        if (isLast) fullMessage = fullMessage + footer;
+        let fullMsg = chunks[i];
+        if (isFirst) fullMsg = header + fullMsg;
+        if (isLast) fullMsg = fullMsg + footer;
 
-        await sendMessage(senderId, { text: fullMessage }, token);
+        await sendMessage(senderId, { text: fullMsg }, token);
       }
 
-    } catch (error) {
+    } catch (err) {
       await sendMessage(senderId, {
         text: header + '❌ Something went wrong. Please try again.' + footer
       }, token);
