@@ -39,7 +39,7 @@ module.exports = {
 
   async execute(senderId, args, token) {
     const message = args.join(' ') || 'Hello';
-    const header = '💬 | 𝙶𝚛𝚘𝚔 𝙰𝚒\n・────────────・\n';
+    const header = '💬 | Anime Focus 𝙰𝚒\n・────────────・\n';
     const footer = '\n・──── >ᴗ< ─────・';
 
     try {
