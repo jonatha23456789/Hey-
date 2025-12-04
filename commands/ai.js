@@ -2,6 +2,7 @@ const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
 
 function makeBold(text) {
+  // conservée si tu veux la réutiliser un jour, mais on NE L'APPLIQUE PAS
   return text.replace(/\*\*(.+?)\*\*/g, (match, word) => {
     let boldText = '';
     for (let i = 0; i < word.length; i++) {
@@ -41,8 +42,7 @@ module.exports = {
     const footer = '\n・──── >ᴗ< ─────・';
 
     try {
-
-      // 🚀 API GPT5 (nouvelle)
+      // Appel API Miko GPT-5
       const apiUrl = `https://miko-utilis.vercel.app/api/gpt5`;
       const response = await axios.get(apiUrl, {
         params: {
@@ -55,13 +55,15 @@ module.exports = {
         throw new Error('API error');
       }
 
+      // Récupère la réponse texte
       let aiResponse = response.data.data.response;
+      aiResponse = aiResponse ? aiResponse.trim() : '';
 
-      aiResponse = aiResponse.trim();
-      aiResponse = makeBold(aiResponse);
+      // === IMPORTANT : on n'applique PAS makeBold ici ===
+      // aiResponse = makeBold(aiResponse); // <-- ligne supprimée / commentée
 
-      const chunks = splitMessage(aiResponse);
-
+      // Découpage et envoi
+      const chunks = splitMessage(aiResponse || 'Désolé, pas de réponse.');
       for (let i = 0; i < chunks.length; i++) {
         const isFirst = i === 0;
         const isLast = i === chunks.length - 1;
@@ -74,6 +76,7 @@ module.exports = {
       }
 
     } catch (err) {
+      console.error('AI command error:', err?.response?.data || err?.message || err);
       await sendMessage(senderId, {
         text: header + '❌ Something went wrong. Please try again.' + footer
       }, token);
