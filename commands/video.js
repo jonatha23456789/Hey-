@@ -1,56 +1,59 @@
-const axios = require('axios');
-const { sendMessage } = require('../handles/sendMessage');
+const axios = require("axios");
+const { sendMessage } = require("../handles/sendMessage");
 
 module.exports = {
-  name: 'video',
-  description: 'Send YouTube video in high quality',
-  usage: '-video <YouTube URL>',
-  author: 'kelvin',
+  name: "youtube",
+  description: "Recherche des vidéos YouTube",
+  usage: "youtube <mot clé>",
+  author: "coffee",
 
-  async execute(senderId, args, pageAccessToken) {
-    const url = args.join(' ').trim();
-    if (!url) {
-      return sendMessage(senderId, { text: '⚠️ Please provide a YouTube link.' }, pageAccessToken);
+  async execute(senderId, args, token) {
+    const query = args.join(" ");
+    if (!query) {
+      return sendMessage(senderId, {
+        text: "❌ | Tu dois entrer un mot clé.\nExemple : youtube zero two"
+      }, token);
     }
 
-    try {
-      // 🔗 Appel API
-      const { data } = await axios.get(`https://arychauhann.onrender.com/api/youtubemp4?url=${encodeURIComponent(url)}`);
+    const api = `https://api.nekolabs.web.id/discovery/youtube/search?q=${encodeURIComponent(query)}`;
 
-      // ✅ Vérification de la réponse
-      if (!data || !data.title || !data.main) {
-        return sendMessage(senderId, { text: '❌ Could not fetch video details. Try another link.' }, pageAccessToken);
+    try {
+      const res = await axios.get(api);
+      const data = res.data;
+
+      if (!data.success || !data.result.length) {
+        return sendMessage(senderId, { text: "❌ | Aucune vidéo trouvée." }, token);
       }
 
-      // 🎬 Envoi des infos de la vidéo
-      const caption = `🎵 *${data.title}*\n👤 Operator: ${data.operator}\n\n📺 *Available Qualities:*`;
-
-      // 🔗 Liste des qualités
-      const qualities = data.other
-        ?.map(q => `• ${q.quality} — [Download Link](${q.link})`)
-        .join('\n') || 'No other formats found.';
-
-      // 🖼️ Envoi de la miniature + info
-      await sendMessage(senderId, {
-        attachment: {
-          type: 'image',
-          payload: { url: data.thumbnail }
-        },
-        text: `${caption}\n\n${qualities}\n\n🎬 *Main Video Link:*\n${data.main}`
-      }, pageAccessToken);
-
-      // 📤 Envoi direct de la vidéo principale
-      await sendMessage(senderId, {
-        attachment: {
-          type: 'video',
-          payload: { url: data.main }
-        },
-        text: `🎬 Playing: ${data.title}`
-      }, pageAccessToken);
+      // Boucle : envoi chaque vidéo une par une
+      for (const video of data.result) {
+        await sendMessage(senderId, {
+          attachment: {
+            type: "template",
+            payload: {
+              template_type: "generic",
+              elements: [
+                {
+                  title: video.title,
+                  subtitle: `${video.channel} | ${video.duration}`,
+                  image_url: video.cover,
+                  buttons: [
+                    {
+                      type: "web_url",
+                      url: video.url,
+                      title: "▶️ Regarder"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }, token);
+      }
 
     } catch (error) {
-      console.error('Video Command Error:', error.message || error);
-      sendMessage(senderId, { text: '🚨 Failed to download or send the video.' }, pageAccessToken);
+      console.log(error);
+      sendMessage(senderId, { text: "❌ | Erreur avec l’API YouTube." }, token);
     }
   }
 };
