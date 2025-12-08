@@ -1,92 +1,79 @@
-const axios = require("axios");
-const { sendMessage } = require("../handles/sendMessage");
-
-global.youtubeChoices = {}; // stockage temporaire des listes
+const { Telegraf } = require("telegraf");
+const yts = require("yt-search");
+const ytdl = require("@distube/ytdl-core");
+const fs = require("fs");
 
 module.exports = {
-  name: "video",
-  description: "Recherche et téléchargement YouTube",
-  usage: "youtube <mot clé>",
-  author: "coffee",
+    name: "video",
+    alias: ["v"],
+    category: "media",
 
-  async execute(senderId, args, token, event) {
-    // ============================
-    // 📌 SI L’UTILISATEUR REPOND PAR UN NUMÉRO
-    // ============================
-    if (event.messageReply && youtubeChoices[senderId]) {
-      const choice = parseInt(args[0]);
+    run: async (bot, msg) => {
+        const text = msg.message.text.split(" ").slice(1).join(" ");
 
-      if (isNaN(choice) || choice < 1 || choice > youtubeChoices[senderId].length) {
-        return sendMessage(senderId, { text: "❌ | Numéro invalide." }, token);
-      }
+        if (!text) {
+            return bot.telegram.sendMessage(
+                msg.chat.id,
+                "❌ | Donne un titre de vidéo.\nExemple : `yt naruto opening`"
+            );
+        }
 
-      const selected = youtubeChoices[senderId][choice - 1];
+        const search = await yts(text);
+        if (!search.videos || search.videos.length === 0) {
+            return bot.telegram.sendMessage(msg.chat.id, "Aucune vidéo trouvée.");
+        }
 
-      await sendMessage(senderId, { text: `🎬 Téléchargement de : ${selected.title}` }, token);
+        // Prendre les 10 premières
+        const results = search.videos.slice(0, 10);
 
-      // API pour télécharger la vidéo
-      const dl = await axios.get(
-        `https://api.nekolabs.web.id/downloader/youtube?url=${encodeURIComponent(selected.url)}`
-      ).catch(() => null);
+        // Construire la liste
+        let listMessage = "📺 *Résultats YouTube*\n\n";
+        results.forEach((video, index) => {
+            listMessage += `*${index + 1}.* ${video.title}\n`;
+        });
 
-      if (!dl || !dl.data || !dl.data.success) {
-        return sendMessage(senderId, { text: "❌ | Impossible de télécharger la vidéo." }, token);
-      }
+        // envoyer la liste + sauver les résultats en mémoire
+        bot.session = bot.session || {};
+        bot.session[msg.chat.id] = results;
 
-      const videoURL = dl.data.result.video.url;
-
-      try {
-        const file = await axios.get(videoURL, { responseType: "arraybuffer" });
-
-        await sendMessage(
-          senderId,
-          {
-            attachment: {
-              type: "video",
-              payload: {
-                is_reusable: true
-              }
-            },
-            filedata: file.data,
-          },
-          token
+        bot.telegram.sendMessage(
+            msg.chat.id,
+            listMessage + "\n🔁 *Réponds avec un numéro pour télécharger la vidéo.*",
+            { parse_mode: "Markdown" }
         );
-
-      } catch (err) {
-        return sendMessage(senderId, { text: "❌ | Erreur en envoyant la vidéo." }, token);
-      }
-
-      delete youtubeChoices[senderId];
-      return;
     }
+};
 
-    // ============================
-    // 📌 MODE RECHERCHE NORMALE
-    // ============================
-    const query = args.join(" ");
-    if (!query) {
-      return sendMessage(senderId, { text: "❌ | Exemple : youtube zero two" }, token);
-    }
+// Gestion du reply pour choisir une vidéo
+module.exports.reply = async (bot, msg) => {
+    if (!msg.message.reply_to_message) return;
 
-    const req = await axios.get(
-      `https://api.nekolabs.web.id/discovery/youtube/search?q=${encodeURIComponent(query)}`
-    );
+    const chatId = msg.chat.id;
+    const replyText = msg.message.text.trim();
 
-    const results = req.data.result;
+    // Vérifier si c’est bien un numéro
+    if (!/^[0-9]+$/.test(replyText)) return;
 
-    if (!results || results.length === 0) {
-      return sendMessage(senderId, { text: "❌ | Aucune vidéo trouvée." }, token);
-    }
+    const choice = parseInt(replyText);
+    const results = bot.session?.[chatId];
 
-    youtubeChoices[senderId] = results;
+    if (!results || !results[choice - 1]) return;
 
-    let text = `🔎 Résultats pour : **${query}**\n\n`;
-    results.forEach((v, i) => {
-      text += `${i + 1}️⃣ ${v.title}\n${v.channel} | ${v.duration}\n\n`;
-    });
+    const video = results[choice - 1];
 
-    text += "👉 Réponds à ce message avec le numéro de la vidéo.\nExemple : 3";
+    const url = video.url;
+    const filePath = `video_${chatId}.mp4`;
 
-    await sendMessage(senderId, { text }, token);
-  }
+    bot.telegram.sendMessage(chatId, "⏳ Téléchargement en cours...");
+
+    ytdl(url, { filter: "videoandaudio", quality: "lowest" })
+        .pipe(fs.createWriteStream(filePath))
+        .on("finish", async () => {
+            await bot.telegram.sendChatAction(chatId, "upload_video");
+            await bot.telegram.sendVideo(chatId, { source: filePath });
+            fs.unlinkSync(filePath);
+        })
+        .on("error", (err) => {
+            bot.telegram.sendMessage(chatId, "❌ Erreur lors du téléchargement.");
+        });
 };
