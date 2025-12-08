@@ -2,7 +2,7 @@ const axios = require("axios");
 const { sendMessage } = require("../handles/sendMessage");
 
 module.exports = {
-  name: "youtube",
+  name: "video",
   description: "Recherche des vidéos YouTube",
   usage: "youtube <mot clé>",
   author: "coffee",
