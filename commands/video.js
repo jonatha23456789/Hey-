@@ -16,7 +16,7 @@ module.exports = {
     const isReply = event.messageReply && youtubeChoices[senderId];
 
     // ========================================================
-    // 🟪 SI L'UTILISATEUR A RÉPONDU AVEC UN NUMÉRO
+    // 🟪 SI L'UTILISATEUR REPOND AVEC UN NUMÉRO
     // ========================================================
     if (isReply) {
       const choiceIndex = parseInt(args[0]);
@@ -86,14 +86,26 @@ module.exports = {
       return sendMessage(senderId, { text: "❌ | Aucune vidéo trouvée." }, token);
     }
 
-    // Stocker les choix pour ce user uniquement
+    // Stock les résultats
     youtubeChoices[senderId] = results;
 
+    // ===========================================
+    // 🟩 SYSTÈME ANTI ERREUR (limite Messenger 2000)
+    // ===========================================
     let msg = `🔎 Résultats pour : **${query}**\n\n`;
 
-    results.forEach((v, i) => {
-      msg += `${i + 1}️⃣ *${v.title}*\n${v.channel} • ${v.duration}\n\n`;
-    });
+    for (let i = 0; i < results.length; i++) {
+      const v = results[i];
+      const line =
+        `${i + 1}️⃣ *${v.title}*\n${v.channel} • ${v.duration}\n\n`;
+
+      if ((msg + line).length >= 1800) {
+        msg += "⚠️ Liste réduite (limite Messenger atteinte).\n\n";
+        break;
+      }
+
+      msg += line;
+    }
 
     msg += "👉 Réponds à **ce message** avec le **numéro**.\nExemple : 3";
 
@@ -101,7 +113,7 @@ module.exports = {
   },
 
   // ==========================================================
-  // 🟥 FONCTION REPLY (appelée par handleMessage)
+  // 🟥 MODE REPLY
   // ==========================================================
   async reply(senderId, messageText, token, event) {
     const number = parseInt(messageText);
