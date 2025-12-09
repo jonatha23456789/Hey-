@@ -1,12 +1,12 @@
 const fs = require('fs');
 const path = require('path');
 const { sendMessage } = require('./sendMessage');
-const alldl = require('../commands/alldl'); // ✅ Ajout ici
+const alldl = require('../commands/alldl');
 
 const commands = new Map();
 const prefix = '-';
 
-// Charger les commandes
+// Charger toutes les commandes
 fs.readdirSync(path.join(__dirname, '../commands'))
   .filter(file => file.endsWith('.js'))
   .forEach(file => {
@@ -21,26 +21,33 @@ async function handleMessage(event, pageAccessToken) {
   const messageText = event?.message?.text?.trim();
   if (!messageText) return console.log('Received event without message text');
 
-  // 🌐 AUTO-EXECUTION ALLDL SI MESSAGE CONTIENT UN LIEN
+  // ⛔ Auto-download (ALDDL) si lien détecté
   const urlRegex = /(https?:\/\/[^\s]+)/gi;
-
   if (urlRegex.test(messageText)) {
     try {
       console.log("🎬 Auto ALDDL detected → downloading...");
-      await alldl.on(senderId, messageText, pageAccessToken); // ✅ INTEGRATION PARFAITE
-      return; // stop la commande normale
+      await alldl.on(senderId, messageText, pageAccessToken);
+      return;
     } catch (e) {
       console.error("Auto alldl error:", e.message);
     }
   }
 
-  // 🌍 AUTO-TRADUCTION
+  // 🌍 Auto traduction si activée
   const autoTranslate = commands.get("autotranslate");
   if (autoTranslate && autoTranslate.auto) {
       await autoTranslate.auto(senderId, messageText, pageAccessToken, sendMessage);
   }
 
-  // ↓ System normal de commandes
+  // 🎯 INTERCEPTION REPLY → YOUTUBE (IMPORTANT)
+  if (event.messageReply && global.youtubeChoices && global.youtubeChoices[senderId]) {
+    const yt = commands.get("youtube");
+    if (yt && yt.reply) {
+        return yt.reply(senderId, messageText, pageAccessToken, event);
+    }
+  }
+
+  // 🔥 System normal des commandes
   const [commandName, ...args] = messageText.startsWith(prefix)
     ? messageText.slice(prefix.length).split(' ')
     : messageText.split(' ');
