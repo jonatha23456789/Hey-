@@ -1,7 +1,16 @@
 const axios = require("axios");
 const { sendMessage } = require("../handles/sendMessage");
 
-global.youtubeChoices = {}; // stockage temporaire : senderId → liste des vidéos
+global.youtubeChoices = {}; 
+
+// Fonction pour envoyer du texte en respectant la limite de 2000 caractères
+async function sendLongMessage(senderId, text, token) {
+  const parts = text.match(/[\s\S]{1,1800}/g) || [];
+
+  for (const part of parts) {
+    await sendMessage(senderId, { text: part }, token);
+  }
+}
 
 module.exports = {
   name: "video",
@@ -9,15 +18,11 @@ module.exports = {
   usage: "youtube <mot clé>",
   author: "coffee",
 
-  // ==========================================================
-  // 🟦 MODE NORMAL → RECHERCHE
-  // ==========================================================
+  // --------------- EXECUTE (recherche + reply) -------------------
   async execute(senderId, args, token, event) {
     const isReply = event.messageReply && youtubeChoices[senderId];
 
-    // ========================================================
-    // 🟪 SI L'UTILISATEUR REPOND AVEC UN NUMÉRO
-    // ========================================================
+    // ------- SI REPLY PAR UN NUMÉRO -------
     if (isReply) {
       const choiceIndex = parseInt(args[0]);
 
@@ -29,38 +34,34 @@ module.exports = {
 
       await sendMessage(senderId, { text: `🎬 Téléchargement : ${selected.title}` }, token);
 
-      // Télécharger la vidéo via l'API
+      // Télécharger
       let dl;
       try {
         dl = await axios.get(
           `https://api.nekolabs.web.id/downloader/youtube?url=${encodeURIComponent(selected.url)}`
         );
       } catch {
-        dl = null;
+        return sendMessage(senderId, { text: "❌ | Erreur API download." }, token);
       }
 
-      if (!dl || !dl.data || !dl.data.success) {
-        return sendMessage(senderId, { text: "❌ | Impossible de télécharger." }, token);
+      if (!dl?.data?.success) {
+        return sendMessage(senderId, { text: "❌ | Téléchargement impossible." }, token);
       }
 
       const videoURL = dl.data.result.video.url;
 
       try {
-        const fileBuffer = await axios.get(videoURL, { responseType: "arraybuffer" });
+        const file = await axios.get(videoURL, { responseType: "arraybuffer" });
 
         await sendMessage(
           senderId,
           {
-            attachment: {
-              type: "video",
-              payload: { is_reusable: true }
-            },
-            filedata: fileBuffer.data
+            attachment: { type: "video", payload: { is_reusable: true } },
+            filedata: file.data
           },
           token
         );
-
-      } catch (err) {
+      } catch {
         return sendMessage(senderId, { text: "❌ | Erreur en envoyant la vidéo." }, token);
       }
 
@@ -68,9 +69,7 @@ module.exports = {
       return;
     }
 
-    // ==========================================================
-    // 🟦 MODE RECHERCHE
-    // ==========================================================
+    // ---------------- RECHERCHE NORMALE ----------------
     const query = args.join(" ");
     if (!query) {
       return sendMessage(senderId, { text: "❌ | Exemple : youtube zero two" }, token);
@@ -86,35 +85,22 @@ module.exports = {
       return sendMessage(senderId, { text: "❌ | Aucune vidéo trouvée." }, token);
     }
 
-    // Stock les résultats
     youtubeChoices[senderId] = results;
 
-    // ===========================================
-    // 🟩 SYSTÈME ANTI ERREUR (limite Messenger 2000)
-    // ===========================================
-    let msg = `🔎 Résultats pour : **${query}**\n\n`;
+    let message = `🔎 Résultats pour : *${query}*\n\n`;
 
-    for (let i = 0; i < results.length; i++) {
-      const v = results[i];
-      const line =
-        `${i + 1}️⃣ *${v.title}*\n${v.channel} • ${v.duration}\n\n`;
+    results.forEach((v, i) => {
+      message += `#${i + 1} → ${v.title}\n`;
+      message += `${v.channel} • ${v.duration}\n\n`;
+    });
 
-      if ((msg + line).length >= 1800) {
-        msg += "⚠️ Liste réduite (limite Messenger atteinte).\n\n";
-        break;
-      }
+    message += "👉 Réponds **à mon message** avec un numéro.\nExemple : 3";
 
-      msg += line;
-    }
-
-    msg += "👉 Réponds à **ce message** avec le **numéro**.\nExemple : 3";
-
-    return sendMessage(senderId, { text: msg }, token);
+    // Envoi split
+    await sendLongMessage(senderId, message, token);
   },
 
-  // ==========================================================
-  // 🟥 MODE REPLY
-  // ==========================================================
+  // ---- Reply handler ----
   async reply(senderId, messageText, token, event) {
     const number = parseInt(messageText);
     return module.exports.execute(senderId, [number], token, event);
