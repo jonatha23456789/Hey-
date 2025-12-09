@@ -1,53 +1,61 @@
 const axios = require("axios");
 const { sendMessage } = require("../handles/sendMessage");
 
-global.youtubeChoices = {}; // stockage temporaire des listes
+global.youtubeChoices = {}; // stockage temporaire : senderId → liste des vidéos
 
 module.exports = {
-  name: "youtube",
+  name: "video",
   description: "Recherche et téléchargement YouTube",
   usage: "youtube <mot clé>",
   author: "coffee",
 
+  // ==========================================================
+  // 🟦 MODE NORMAL → RECHERCHE
+  // ==========================================================
   async execute(senderId, args, token, event) {
-    // ============================
-    // 📌 SI L’UTILISATEUR REPOND PAR UN NUMÉRO
-    // ============================
-    if (event.messageReply && youtubeChoices[senderId]) {
-      const choice = parseInt(args[0]);
+    const isReply = event.messageReply && youtubeChoices[senderId];
 
-      if (isNaN(choice) || choice < 1 || choice > youtubeChoices[senderId].length) {
+    // ========================================================
+    // 🟪 SI L'UTILISATEUR A RÉPONDU AVEC UN NUMÉRO
+    // ========================================================
+    if (isReply) {
+      const choiceIndex = parseInt(args[0]);
+
+      if (isNaN(choiceIndex) || choiceIndex < 1 || choiceIndex > youtubeChoices[senderId].length) {
         return sendMessage(senderId, { text: "❌ | Numéro invalide." }, token);
       }
 
-      const selected = youtubeChoices[senderId][choice - 1];
+      const selected = youtubeChoices[senderId][choiceIndex - 1];
 
-      await sendMessage(senderId, { text: `🎬 Téléchargement de : ${selected.title}` }, token);
+      await sendMessage(senderId, { text: `🎬 Téléchargement : ${selected.title}` }, token);
 
-      // API pour télécharger la vidéo
-      const dl = await axios.get(
-        `https://api.nekolabs.web.id/downloader/youtube?url=${encodeURIComponent(selected.url)}`
-      ).catch(() => null);
+      // Télécharger la vidéo via l'API
+      let dl;
+      try {
+        dl = await axios.get(
+          `https://api.nekolabs.web.id/downloader/youtube?url=${encodeURIComponent(selected.url)}`
+        );
+      } catch {
+        dl = null;
+      }
 
       if (!dl || !dl.data || !dl.data.success) {
-        return sendMessage(senderId, { text: "❌ | Impossible de télécharger la vidéo." }, token);
+        return sendMessage(senderId, { text: "❌ | Impossible de télécharger." }, token);
       }
 
       const videoURL = dl.data.result.video.url;
 
       try {
-        const file = await axios.get(videoURL, { responseType: "arraybuffer" });
+        const fileBuffer = await axios.get(videoURL, { responseType: "arraybuffer" });
 
         await sendMessage(
           senderId,
           {
             attachment: {
               type: "video",
-              payload: {
-                is_reusable: true
-              }
+              payload: { is_reusable: true }
             },
-            filedata: file.data,
+            filedata: fileBuffer.data
           },
           token
         );
@@ -60,9 +68,9 @@ module.exports = {
       return;
     }
 
-    // ============================
-    // 📌 MODE RECHERCHE NORMALE
-    // ============================
+    // ==========================================================
+    // 🟦 MODE RECHERCHE
+    // ==========================================================
     const query = args.join(" ");
     if (!query) {
       return sendMessage(senderId, { text: "❌ | Exemple : youtube zero two" }, token);
@@ -78,15 +86,25 @@ module.exports = {
       return sendMessage(senderId, { text: "❌ | Aucune vidéo trouvée." }, token);
     }
 
+    // Stocker les choix pour ce user uniquement
     youtubeChoices[senderId] = results;
 
-    let text = `🔎 Résultats pour : **${query}**\n\n`;
+    let msg = `🔎 Résultats pour : **${query}**\n\n`;
+
     results.forEach((v, i) => {
-      text += `${i + 1}️⃣ ${v.title}\n${v.channel} | ${v.duration}\n\n`;
+      msg += `${i + 1}️⃣ *${v.title}*\n${v.channel} • ${v.duration}\n\n`;
     });
 
-    text += "👉 Réponds à ce message avec le numéro de la vidéo.\nExemple : 3";
+    msg += "👉 Réponds à **ce message** avec le **numéro**.\nExemple : 3";
 
-    await sendMessage(senderId, { text }, token);
+    return sendMessage(senderId, { text: msg }, token);
+  },
+
+  // ==========================================================
+  // 🟥 FONCTION REPLY (appelée par handleMessage)
+  // ==========================================================
+  async reply(senderId, messageText, token, event) {
+    const number = parseInt(messageText);
+    return module.exports.execute(senderId, [number], token, event);
   }
 };
