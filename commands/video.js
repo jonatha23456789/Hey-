@@ -1,12 +1,10 @@
 const axios = require("axios");
 const { sendMessage } = require("../handles/sendMessage");
 
-global.youtubeChoices = {}; 
+global.youtubeChoices = {};
 
-// Fonction pour envoyer du texte en respectant la limite de 2000 caractères
 async function sendLongMessage(senderId, text, token) {
   const parts = text.match(/[\s\S]{1,1800}/g) || [];
-
   for (const part of parts) {
     await sendMessage(senderId, { text: part }, token);
   }
@@ -15,14 +13,13 @@ async function sendLongMessage(senderId, text, token) {
 module.exports = {
   name: "video",
   description: "Recherche et téléchargement YouTube",
-  usage: "youtube <mot clé>",
+  usage: "video <mot clé>",
   author: "coffee",
 
-  // --------------- EXECUTE (recherche + reply) -------------------
   async execute(senderId, args, token, event) {
     const isReply = event.messageReply && youtubeChoices[senderId];
 
-    // ------- SI REPLY PAR UN NUMÉRO -------
+    // ----------- REPLY (choix numéro) -------------------
     if (isReply) {
       const choiceIndex = parseInt(args[0]);
 
@@ -34,7 +31,7 @@ module.exports = {
 
       await sendMessage(senderId, { text: `🎬 Téléchargement : ${selected.title}` }, token);
 
-      // Télécharger
+      // API download
       let dl;
       try {
         dl = await axios.get(
@@ -51,17 +48,20 @@ module.exports = {
       const videoURL = dl.data.result.video.url;
 
       try {
-        const file = await axios.get(videoURL, { responseType: "arraybuffer" });
+        const response = await axios.get(videoURL, { responseType: "arraybuffer" });
+        const fileBuffer = Buffer.from(response.data);
 
+        // ------ ENVOI VIDÉO MESSENGER (100% FONCTIONNEL) ------
         await sendMessage(
           senderId,
           {
-            attachment: { type: "video", payload: { is_reusable: true } },
-            filedata: file.data
+            attachment: fileBuffer,
+            type: "video"
           },
           token
         );
-      } catch {
+
+      } catch (err) {
         return sendMessage(senderId, { text: "❌ | Erreur en envoyant la vidéo." }, token);
       }
 
@@ -69,10 +69,10 @@ module.exports = {
       return;
     }
 
-    // ---------------- RECHERCHE NORMALE ----------------
+    // ---------- RECHERCHE NORMALE -------------------
     const query = args.join(" ");
     if (!query) {
-      return sendMessage(senderId, { text: "❌ | Exemple : youtube zero two" }, token);
+      return sendMessage(senderId, { text: "❌ | Exemple : video zero two" }, token);
     }
 
     const req = await axios.get(
@@ -96,11 +96,9 @@ module.exports = {
 
     message += "👉 Réponds **à mon message** avec un numéro.\nExemple : 3";
 
-    // Envoi split
     await sendLongMessage(senderId, message, token);
   },
 
-  // ---- Reply handler ----
   async reply(senderId, messageText, token, event) {
     const number = parseInt(messageText);
     return module.exports.execute(senderId, [number], token, event);
