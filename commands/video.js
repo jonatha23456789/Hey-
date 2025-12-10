@@ -1,92 +1,62 @@
 const axios = require("axios");
-const { sendMessage } = require("../handles/sendMessage");
+const FormData = require("form-data");
 
-global.youtubeChoices = {}; // senderId → liste de résultats
+module.exports = async (msg, reply) => {
+  try {
+    const text = msg.body.trim();
 
-module.exports = {
-  name: "video",
-  description: "Recherche et téléchargement YouTube",
-  usage: "video <mot clé>",
-  author: "coffee",
+    // 1️⃣ Recherche YouTube quand l'utilisateur écrit: yt <mot>
+    if (text.startsWith("yt ")) {
+      const q = text.slice(3);
+      const res = await axios.get(`https://api.nekolabs.web.id/discovery/youtube/search?q=${encodeURIComponent(q)}`);
 
-  async execute(senderId, args, token, event) {
-    const userMsg = event.message.text.trim();
-
-    // --------------------------------------------------
-    // 1️⃣ SI L'UTILISATEUR ENVOIE JUSTE UN CHIFFRE
-    // --------------------------------------------------
-    if (!isNaN(userMsg) && youtubeChoices[senderId]) {
-      const index = parseInt(userMsg);
-
-      const list = youtubeChoices[senderId];
-      if (!list[index - 1]) {
-        return sendMessage(senderId, { text: "❌ Numéro invalide." }, token);
+      if (!res.data || !res.data.data || res.data.data.length === 0) {
+        return reply("❌ Aucun résultat trouvé.");
       }
 
-      const selected = list[index - 1];
+      // garder seulement 5 résultats pour éviter 2000 chars
+      const results = res.data.data.slice(0, 5);
 
-      await sendMessage(senderId, { text: `🎬 Téléchargement : ${selected.title}` }, token);
+      let message = "🎬 *Résultats YouTube*\n";
+      results.forEach((v, i) => {
+        message += `\n${i + 1}. ${v.title}`;
+      });
 
-      // ---- Téléchargement ----
-      try {
-        const dl = await axios.get(
-          `https://api.nekolabs.web.id/downloader/youtube?url=${encodeURIComponent(selected.url)}`
-        );
+      global.yt_list = results; // On stocke la liste
 
-        if (!dl.data.success) {
-          return sendMessage(senderId, { text: "❌ Impossible de télécharger." }, token);
-        }
+      return reply(message + "\n\n👉 Tape juste *1, 2, 3, 4 ou 5* pour télécharger.");
+    }
 
-        const videoURL = dl.data.result.video.url;
+    // 2️⃣ L'utilisateur tape 1-5 → télécharger
+    if (/^[1-5]$/.test(text)) {
+      if (!global.yt_list) return reply("❌ Aucune liste trouvée.");
 
-        const file = await axios.get(videoURL, { responseType: "arraybuffer" });
+      const index = parseInt(text) - 1;
+      const video = global.yt_list[index];
 
-        await sendMessage(
-          senderId,
-          {
-            attachment: file.data,
-            type: "video",
-            ext: "mp4"
-          },
-          token
-        );
-      } catch (err) {
-        console.log("DL error:", err.response?.data || err.message);
-        return sendMessage(senderId, { text: "❌ Erreur en envoyant la vidéo." }, token);
-      }
+      reply("⏬ Téléchargement en cours...");
 
-      delete youtubeChoices[senderId];
+      const dl = await axios.get(`https://api.nekolabs.web.id/download/ytdl?url=${video.url}`);
+
+      const mp4url = dl.data?.data?.url;
+      if (!mp4url) return reply("❌ Erreur téléchargement.");
+
+      // Télécharger la vidéo MP4
+      const file = await axios.get(mp4url, { responseType: "arraybuffer" });
+
+      const data = new FormData();
+      data.append("file", file.data, { filename: "video.mp4" });
+
+      await reply({
+        attachment: data,
+        type: "file"
+      });
+
       return;
     }
 
-    // --------------------------------------------------
-    // 2️⃣ MODE RECHERCHE NORMAL
-    // --------------------------------------------------
-    const query = args.join(" ");
-    if (!query) {
-      return sendMessage(senderId, { text: "❌ Exemple : video naruto" }, token);
-    }
-
-    let req = await axios.get(
-      `https://api.nekolabs.web.id/discovery/youtube/search?q=${encodeURIComponent(query)}`
-    );
-
-    const results = req.data.result;
-
-    if (!results || results.length === 0) {
-      return sendMessage(senderId, { text: "❌ Aucune vidéo trouvée." }, token);
-    }
-
-    // Sauvegarde choix
-    youtubeChoices[senderId] = results;
-
-    let txt = `🔎 Résultats pour : *${query}*\n\n`;
-    results.forEach((v, i) => {
-      txt += `${i + 1}️⃣ ${v.title}\n${v.channel} • ${v.duration}\n\n`;
-    });
-
-    txt += "👉 Envoie juste le **numéro** de la vidéo.\nEx : 3";
-
-    await sendMessage(senderId, { text: txt }, token);
+  } catch (e) {
+    console.log("SEND ERROR:", e.response?.data || e);
+    return reply("❌ Erreur interne.");
   }
 };
