@@ -12,14 +12,11 @@ const IMGBB_API_KEY = "2ef14dcf2beb6dbe0c444790faed0cc0";
 // ============================
 async function uploadToImgBB(url) {
   try {
-    // 1. Download image
     const img = await axios.get(url, { responseType: "arraybuffer" });
 
-    // 2. Prepare upload
     const form = new FormData();
     form.append("image", Buffer.from(img.data).toString("base64"));
 
-    // 3. Upload
     const upload = await axios.post(
       `https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`,
       form,
@@ -67,10 +64,7 @@ module.exports = {
       event.messageReply.attachments[0]?.type === "photo"
     ) {
       const imageLink = event.messageReply.attachments[0].url;
-
-      // Upload to ImgBB
       imgURL = await uploadToImgBB(imageLink);
-
       console.log("📸 Uploaded ImgBB URL:", imgURL);
     }
 
@@ -79,21 +73,26 @@ module.exports = {
 
     try {
       // ============================
-      // 🌐 API REQUEST
+      // 🌐 NEW API REQUEST — NEKOLABS
       // ============================
-      const apiRes = await axios.get("https://miko-utilis.vercel.app/api/gpt5", {
+      const apiURL = "https://api.nekolabs.web.id/text-generation/gemini/2.5-flash-lite/v2";
+
+      const res = await axios.get(apiURL, {
         params: {
-          query: message,
-          userId: senderId,
-          imgurl: imgURL || ""
+          text: message,
+          imageUrl: imgURL || "",
+          sessionId: senderId
         }
       });
 
-      if (!apiRes.data || !apiRes.data.status) throw new Error("API error");
+      if (!res.data || !res.data.success) {
+        throw new Error("API error");
+      }
 
-      let ai = apiRes.data.data.response.trim();
+      let aiResponse = res.data.result.trim();
 
-      const chunks = splitMessage(ai);
+      // Découper le message si trop long
+      const chunks = splitMessage(aiResponse);
 
       for (let i = 0; i < chunks.length; i++) {
         let txt = chunks[i];
@@ -104,11 +103,10 @@ module.exports = {
       }
 
     } catch (e) {
-      console.error("❌ AI Error:", e.message);
-
+      console.error("❌ AI Error:", e);
       await sendMessage(
         senderId,
-        { text: header + "❌ Erreur lors du traitement de l'image." + footer },
+        { text: header + "❌ Erreur dans la génération de la réponse." + footer },
         token
       );
     }
