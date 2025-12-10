@@ -1,53 +1,75 @@
 const axios = require('axios');
+const FormData = require("form-data");
 const path = require('path');
 
-// Helper function for POST requests
-const axiosPost = (url, data, params = {}) => axios.post(url, data, { params }).then(res => res.data);
+const axiosPost = (url, data, params = {}) =>
+  axios.post(url, data, { params }).then(res => res.data);
 
-// Send a message with typing indicators
-const sendMessage = async (senderId, { text = '', attachment = null }, pageAccessToken) => {
-  if (!text && !attachment) return;
+const sendMessage = async (senderId, content, pageAccessToken) => {
+  if (!content) return;
 
   const url = `https://graph.facebook.com/v22.0/me/messages`;
+  const uploadUrl = `https://graph.facebook.com/v22.0/me/message_attachments`;
   const params = { access_token: pageAccessToken };
 
   try {
-    // Turn on typing indicator
+    // Typing...
     await axiosPost(url, { recipient: { id: senderId }, sender_action: "typing_on" }, params);
 
-    // Prepare message payload based on content
     const messagePayload = {
       recipient: { id: senderId },
       message: {}
     };
 
-    if (text) {
-      messagePayload.message.text = text;
+    // ---- CASE 1 : TEXT ----
+    if (content.text) {
+      messagePayload.message.text = content.text;
     }
 
-    if (attachment) {
-      if (attachment.type === 'template') {
-        // Use payload directly for template type
-        messagePayload.message.attachment = {
-          type: 'template',
-          payload: attachment.payload
-        };
-      } else {
-        // For other types (audio, image, etc.)
-        messagePayload.message.attachment = {
-          type: attachment.type,
-          payload: {
-            url: attachment.payload.url,
-            is_reusable: true
-          }
-        };
-      }
+    // ---- CASE 2 : URL ATTACHMENT ----
+    if (content.attachment && content.attachment.url) {
+      messagePayload.message.attachment = {
+        type: content.type,
+        payload: {
+          url: content.attachment.url,
+          is_reusable: true
+        }
+      };
+
+      await axiosPost(url, messagePayload, params);
+      return;
     }
 
-    // Send the message
+    // ---- CASE 3 : FILE BUFFER (video/image/audio/file) ----
+    if (content.attachment && Buffer.isBuffer(content.attachment)) {
+
+      const form = new FormData();
+      form.append("message", JSON.stringify({
+        attachment: {
+          type: content.type,
+          payload: { is_reusable: true }
+        }
+      }));
+      form.append("filedata", content.attachment, "upload." + (content.ext || "mp4"));
+
+      const uploadRes = await axios.post(uploadUrl, form, {
+        params,
+        headers: form.getHeaders()
+      });
+
+      // Attach ID
+      messagePayload.message.attachment = {
+        type: content.type,
+        payload: {
+          attachment_id: uploadRes.attachment_id
+        }
+      };
+    }
+
+    // SEND
     await axiosPost(url, messagePayload, params);
 
-    // Turn off typing indicator
+    // Typing off
     await axiosPost(url, { recipient: { id: senderId }, sender_action: "typing_off" }, params);
 
   } catch (e) {
