@@ -26,7 +26,6 @@ module.exports = {
 
     try {
       const apiUrl = `https://api.nekolabs.web.id/image-generation/imagen/4.0-fast?prompt=${encodeURIComponent(finalPrompt)}&ratio=${encodeURIComponent(ratio)}`;
-
       const { data } = await axios.get(apiUrl);
 
       if (!data.success || !data.result) {
@@ -35,13 +34,14 @@ module.exports = {
 
       const imageUrl = data.result;
 
-      // Envoi de l'image
+      // 1️⃣ Envoyer le texte de confirmation et le lien en premier
+      const confirmationText = `✅ Image generated successfully!\n🌐 Direct URL: ${imageUrl}`;
+      await sendMessage(senderId, { text: confirmationText }, pageAccessToken);
+
+      // 2️⃣ Envoyer ensuite l'image
       await sendMessage(senderId, {
         attachment: { type: 'image', payload: { url: imageUrl, is_reusable: true } }
       }, pageAccessToken);
-
-      // Optionnel : envoyer le lien direct
-      await sendMessage(senderId, { text: `✅ Image generated successfully!\n🌐 Direct URL: ${imageUrl}` }, pageAccessToken);
 
     } catch (error) {
       console.error('Imagine Command Error:', error.message || error);
