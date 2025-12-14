@@ -4,7 +4,9 @@ const { sendMessage } = require("../handles/sendMessage");
 
 const IMGBB_API_KEY = "2ef14dcf2beb6dbe0c444790faed0cc0";
 
+// ============================
 // Upload image to ImgBB
+// ============================
 async function uploadToImgBB(url) {
   try {
     const img = await axios.get(url, { responseType: "arraybuffer" });
@@ -18,103 +20,59 @@ async function uploadToImgBB(url) {
     );
 
     return upload.data.data.url;
-  } catch (e) {
-    console.error("❌ ImgBB Error:", e.message);
+  } catch {
     return null;
   }
 }
 
+// ============================
 // Split long messages
-function splitMessage(text) {
-  const maxLength = 1800;
-  const chunks = [];
-  for (let i = 0; i < text.length; i += maxLength) {
-    chunks.push(text.slice(i, i + maxLength));
-  }
-  return chunks;
+// ============================
+function splitMessage(text, max = 1800) {
+  return text.match(new RegExp(`.{1,${max}}`, "g")) || [];
 }
 
-module.exports = {
-  name: "ai",
-  description: "GPT + Vision améliorée",
-  usage: "ai [text or image]",
-  author: "coffee",
+// ============================
+// EXPORT AUTO FUNCTION
+// ============================
+module.exports.autoImage = async function (senderId, imageUrl, token) {
+  const imgURL = await uploadToImgBB(imageUrl);
 
-  async execute(senderId, args, token, event) {
-    const message = args.join(" ").trim() || "Salut 👋";
-    let imgURL = null;
+  if (!imgURL) {
+    return sendMessage(senderId, { text: "❌ Image invalide." }, token);
+  }
 
-    // Detect image reply
-    if (
-      event.messageReply &&
-      event.messageReply.attachments &&
-      event.messageReply.attachments[0]?.type === "photo"
-    ) {
-      const imageLink = event.messageReply.attachments[0].url;
-      imgURL = await uploadToImgBB(imageLink);
-      console.log("📸 ImgBB:", imgURL);
-    }
+  const header = "💬 | Anime Focus AI\n・────────────・\n";
+  const footer = "\n・──── >ᴗ< ─────・";
 
-    const header = "💬 | Anime Focus Ai\n・────────────・\n";
-    const footer = "\n・──── >ᴗ< ─────・";
-
-    // ========= TRY PRIMARY API (Nekolabs Vision) =========
-    async function askNeko() {
-      try {
-        const res = await axios.get(
-          "https://api.nekolabs.web.id/text-generation/gemini/2.5-flash-lite/v2",
-          {
-            params: {
-              text: message,
-              imageUrl: imgURL || "",
-              sessionId: senderId,
-              vision: true
-            }
-          }
-        );
-
-        if (!res.data.success) return null;
-        return res.data.result.trim();
-      } catch (e) {
-        return null;
+  try {
+    const res = await axios.get(
+      "https://api.nekolabs.web.id/text-generation/gpt/5-nano",
+      {
+        params: {
+          text: "Analyse cette image",
+          imageUrl: imgURL,
+          sessionId: senderId
+        }
       }
+    );
+
+    if (!res.data?.success) throw new Error();
+
+    const parts = splitMessage(res.data.result.trim());
+
+    for (let i = 0; i < parts.length; i++) {
+      let msg = parts[i];
+      if (i === 0) msg = header + msg;
+      if (i === parts.length - 1) msg += footer;
+
+      await sendMessage(senderId, { text: msg }, token);
     }
-
-    // ========= SECOND API (super analyse d’image) =========
-    async function askVisionFallback() {
-      try {
-        const res = await axios.post(
-          "https://api.ryzendesu.vip/api/ai/vision",
-          {
-            prompt: message,
-            image: imgURL
-          }
-        );
-
-        return res.data.result || null;
-      } catch (e) {
-        return null;
-      }
-    }
-
-    // ========= EXECUTE AI =========
-    let aiResponse = await askNeko();
-
-    if (!aiResponse) {
-      console.log("⚠ Nekolabs failed → fallback vision activated");
-      aiResponse =
-        (await askVisionFallback()) ||
-        "❌ Je n’ai pas pu analyser l’image, réessaie avec une autre.";
-    }
-
-    // ========= SEND IN CHUNKS =========
-    const chunks = splitMessage(aiResponse);
-
-    for (let i = 0; i < chunks.length; i++) {
-      let txt = chunks[i];
-      if (i === 0) txt = header + txt;
-      if (i === chunks.length - 1) txt = txt + footer;
-      await sendMessage(senderId, { text: txt }, token);
-    }
+  } catch {
+    await sendMessage(
+      senderId,
+      { text: header + "❌ Impossible d’analyser l’image." + footer },
+      token
+    );
   }
 };
