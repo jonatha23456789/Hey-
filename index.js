@@ -1,116 +1,112 @@
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
-const axios = require('axios');
+const { readFile, readdir, watch } = require('fs/promises');
+const { join, resolve } = require('path');
 const { handleMessage } = require('./handles/handleMessage');
 const { handlePostback } = require('./handles/handlePostback');
 
 const app = express();
-app.use(express.json());
-
 const VERIFY_TOKEN = 'pagebot';
-const PAGE_ACCESS_TOKEN = fs.readFileSync('token.txt', 'utf8').trim();
-const COMMANDS_PATH = path.join(__dirname, 'commands');
+const COMMANDS_PATH = join(__dirname, 'commands');
+const GRAPH_API = 'https://graph.facebook.com/v23.0/me';
 
-// Webhook verification
+let PAGE_ACCESS_TOKEN;
+
+app.use(express.json({ limit: '10mb' }));
+
+const loadToken = async () => PAGE_ACCESS_TOKEN = (await readFile('token.txt', 'utf8')).trim();
+
+const apiCall = async (endpoint, data) => {
+  const response = await fetch(`${GRAPH_API}${endpoint}?access_token=${PAGE_ACCESS_TOKEN}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  if (!response.ok) throw new Error(`API Error: ${response.status}`);
+  return response.json();
+};
+
+
+
+const clearMenu = async () => {
+  try {
+    await fetch(`${GRAPH_API}/messenger_profile?access_token=${PAGE_ACCESS_TOKEN}&fields=persistent_menu,get_started`, {
+      method: 'DELETE'
+    });
+  } catch (e) {
+    console.error('Menu clear warning:', e.message);
+  }
+};
+
+const setupMenu = async () => {
+  try {
+    await clearMenu();
+    
+    const menuItems = [{
+      type: 'postback',
+      title: 'Help',
+      payload: 'CMD_HELP'
+    }];
+    
+    await apiCall('/messenger_profile', {
+      get_started: { payload: 'GET_STARTED' },
+      persistent_menu: [{
+        locale: 'default',
+        composer_input_disabled: false,
+        call_to_actions: menuItems
+      }]
+    });
+
+    console.log(`✅ Menu set to Help only`);
+  } catch (e) {
+    console.error('❌ Menu setup failed:', e.message);
+  }
+};
+
+const startWatcher = async () => {
+  try {
+    const watcher = watch(COMMANDS_PATH);
+    for await (const { eventType, filename } of watcher) {
+      if (eventType === 'change' && filename?.endsWith('.js')) setupMenu();
+    }
+  } catch (e) {
+    console.error('Watcher error:', e.message);
+  }
+};
+
 app.get('/webhook', (req, res) => {
   const { 'hub.mode': mode, 'hub.verify_token': token, 'hub.challenge': challenge } = req.query;
-
-  if (mode && token) {
-    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-      console.log('WEBHOOK_VERIFIED');
-      return res.status(200).send(challenge);
-    }
-    return res.sendStatus(403);
-  }
-
-  res.sendStatus(400); // Bad request if neither mode nor token are provided
+  return mode === 'subscribe' && token === VERIFY_TOKEN 
+    ? (console.log('✅ Webhook verified'), res.status(200).send(challenge))
+    : res.sendStatus(403);
 });
 
-// Webhook event handling
 app.post('/webhook', (req, res) => {
-  const { body } = req;
-
-  if (body.object === 'page') {
-    // Ensure entry and messaging exist before iterating
-    body.entry?.forEach(entry => {
-      entry.messaging?.forEach(event => {
-        if (event.message) {
-          handleMessage(event, PAGE_ACCESS_TOKEN);
-        } else if (event.postback) {
-          handlePostback(event, PAGE_ACCESS_TOKEN);
-        }
-      });
-    });
-
-    return res.status(200).send('EVENT_RECEIVED');
-  }
-
-  res.sendStatus(404);
-});
-
-// Helper function for Axios requests
-const sendMessengerProfileRequest = async (method, url, data = null) => {
-  try {
-    const response = await axios({
-      method,
-      url: `https://graph.facebook.com/v22.0${url}?access_token=${PAGE_ACCESS_TOKEN}`,
-      headers: { 'Content-Type': 'application/json' },
-      data
-    });
-    return response.data;
-  } catch (error) {
-    console.error(`Error in ${method} request:`, error.response?.data || error.message);
-    throw error;
-  }
-};
-
-// Load all command files from the "commands" directory
-const loadCommands = () => {
-  return fs.readdirSync(COMMANDS_PATH)
-    .filter(file => file.endsWith('.js'))
-    .map(file => {
-      const command = require(path.join(COMMANDS_PATH, file));
-      return command.name && command.description ? { name: command.name, description: command.description } : null;
+  if (req.body.object !== 'page') return res.sendStatus(404);
+  
+  req.body.entry?.forEach(entry => 
+    entry.messaging?.forEach(event => {
+      if (event.message) handleMessage(event, PAGE_ACCESS_TOKEN);
+      else if (event.postback) handlePostback(event, PAGE_ACCESS_TOKEN);
     })
-    .filter(Boolean);
-};
-
-// Load or reload Messenger Menu Commands dynamically
-const loadMenuCommands = async (isReload = false) => {
-  const commands = loadCommands();
-
-  if (isReload) {
-    // Delete existing commands if reloading
-    await sendMessengerProfileRequest('delete', '/me/messenger_profile', { fields: ['commands'] });
-    console.log('Menu commands deleted successfully.');
-  }
-
-  // Load new or updated commands
-  await sendMessengerProfileRequest('post', '/me/messenger_profile', {
-    commands: [{ locale: 'default', commands }],
-  });
-
-  console.log('Menu commands loaded successfully.');
-};
-
-// Watch for changes in the commands directory and reload the commands
-fs.watch(COMMANDS_PATH, (eventType, filename) => {
-  if (['change', 'rename'].includes(eventType) && filename.endsWith('.js')) {
-    loadMenuCommands(true).catch(error => {
-      console.error('Error reloading menu commands:', error);
-    });
-  }
+  );
+  
+  res.status(200).send('EVENT_RECEIVED');
 });
 
-// Server initialization
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, async () => {
-  console.log(`Server is running on port ${PORT}`);
-  // Load Messenger Menu Commands asynchronously after the server starts
+const start = async () => {
   try {
-    await loadMenuCommands(); // Load commands without deleting (initial load)
-  } catch (error) {
-    console.error('Error loading initial menu commands:', error);
+    await loadToken();
+    const PORT = process.env.PORT || 3000;
+    
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+      setupMenu();
+      startWatcher();
+    });
+  } catch (e) {
+    console.error('Startup failed:', e.message);
+    process.exit(1);
   }
-});
+};
+
+start();
