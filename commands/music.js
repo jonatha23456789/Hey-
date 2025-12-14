@@ -1,9 +1,10 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const FormData = require('form-data');
 const { sendMessage } = require('../handles/sendMessage');
 
-const musicChoice = {}; // pour stocker le choix mp3/mp4 par utilisateur
+const musicChoice = {}; // pour stocker le choix et la recherche par utilisateur
 
 module.exports = {
   name: 'music',
@@ -16,42 +17,57 @@ module.exports = {
       return sendMessage(senderId, { text: '❌ Please provide a song name.' }, pageAccessToken);
     }
 
-    // On demande à l'utilisateur si MP3 ou MP4
-    musicChoice[senderId] = true;
-    await sendMessage(senderId, {
-      text: '🎵 Do you want to download the song as MP3 or MP4? Reply with `mp3` or `mp4`.'
-    }, pageAccessToken);
+    const query = args.join(' ');
 
-    // Stocke le titre recherché pour le choix
-    musicChoice[`${senderId}_query`] = args.join(' ');
+    try {
+      // Recherche via l'API Nekolabs
+      const res = await axios.get(`https://api.nekolabs.web.id/discovery/youtube/search?q=${encodeURIComponent(query)}`);
+      const videos = res.data.result?.slice(0, 5);
+      if (!videos || videos.length === 0) {
+        return sendMessage(senderId, { text: '❌ No songs found for your query.' }, pageAccessToken);
+      }
+
+      // Stocke les vidéos pour l'utilisateur
+      musicChoice[senderId] = videos;
+
+      // Formate la liste
+      const listText = videos.map((v, i) => 
+        `${i + 1}. ${v.title} (${v.duration}) - ${v.channel}`
+      ).join('\n');
+
+      await sendMessage(senderId, {
+        text: `🎵 Songs found:\n\n${listText}\n\nReply with the number and type: e.g. "1 mp3" or "2 mp4"`
+      }, pageAccessToken);
+
+    } catch (err) {
+      console.error('Music search error:', err.message || err);
+      await sendMessage(senderId, { text: '❌ Error fetching songs.' }, pageAccessToken);
+    }
   },
 
   // Fonction pour gérer le choix mp3/mp4
   async handleChoice(senderId, messageText, pageAccessToken) {
     if (!musicChoice[senderId]) return false;
 
-    const format = messageText.toLowerCase();
+    const parts = messageText.trim().split(' ');
+    if (parts.length !== 2) return false;
+
+    const index = parseInt(parts[0], 10) - 1;
+    const format = parts[1].toLowerCase();
     if (!['mp3', 'mp4'].includes(format)) return false;
 
-    const query = musicChoice[`${senderId}_query`];
+    const videos = musicChoice[senderId];
+    if (index < 0 || index >= videos.length) return false;
+
+    const video = videos[index];
     delete musicChoice[senderId];
-    delete musicChoice[`${senderId}_query`];
 
     try {
-      // Cherche la vidéo sur YouTube via l'API Nekolabs
-      const searchRes = await axios.get(`https://api.nekolabs.web.id/discovery/youtube/search?q=${encodeURIComponent(query)}`);
-      const video = searchRes.data.result?.[0];
-      if (!video) {
-        await sendMessage(senderId, { text: '❌ No video found for this query.' }, pageAccessToken);
-        return true;
-      }
-
-      // Demande de téléchargement via l'API Nekolabs
+      // Télécharger le fichier via l'API Nekolabs
       const downloadRes = await axios.get(`https://api.nekolabs.web.id/download/youtube?url=${encodeURIComponent(video.url)}&type=${format}`);
       const fileUrl = downloadRes.data.result;
       if (!fileUrl) {
-        await sendMessage(senderId, { text: '❌ Error fetching the download link.' }, pageAccessToken);
-        return true;
+        return sendMessage(senderId, { text: '❌ Error fetching the download link.' }, pageAccessToken);
       }
 
       // Téléchargement temporaire
