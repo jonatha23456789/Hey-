@@ -29,59 +29,113 @@ async function uploadToImgBB(url) {
 // ============================
 // Split long messages
 // ============================
-function splitMessage(text, maxLength = 1800) {
-  return text.match(new RegExp(`.{1,${maxLength}}`, "g")) || [];
+function splitMessage(text, max = 1800) {
+  return text.match(new RegExp(`.{1,${max}}`, "g")) || [];
 }
 
 // ============================
-// Fonction auto → analyse texte ou image
+// COMMANDE AI
 // ============================
-module.exports.auto = async function(senderId, imageUrl = "", pageAccessToken, text = "") {
-  let imgURL = "";
-  if (imageUrl) {
-    imgURL = await uploadToImgBB(imageUrl);
-    if (!imgURL) {
-      return sendMessage(senderId, { text: "❌ Impossible d’uploader l’image." }, pageAccessToken);
+module.exports = {
+  name: "ai",
+  description: "Answer all questions and analyze images",
+  usage: "[text or image]",
+  author: "coffee",
+
+  // =====================================
+  // Fonction principale (appelable manuellement si besoin)
+  // =====================================
+  async execute(senderId, args, token, event) {
+    const message = args.join(" ").trim() || "Analyse cette image";
+    let imgURL = "";
+
+    // -----------------------------
+    // 📸 Détection d'image reply
+    // -----------------------------
+    if (
+      event.messageReply &&
+      event.messageReply.attachments &&
+      event.messageReply.attachments[0]?.type === "photo"
+    ) {
+      const imageLink = event.messageReply.attachments[0].url;
+      imgURL = await uploadToImgBB(imageLink);
+      console.log("📸 ImgBB URL:", imgURL);
     }
-  }
 
-  const prompt = text || "Analyse cette image et décris-la.";
+    const header = "💬 | Anime Focus AI\n・────────────・\n";
+    const footer = "\n・──── >ᴗ< ─────・";
 
-  const header = "💬 | Anime Focus Ai\n・────────────・\n";
-  const footer = "\n・──── >ᴗ< ─────・";
-
-  try {
-    const res = await axios.get(
-      "https://api.nekolabs.web.id/text-generation/gpt/5-nano",
-      {
-        params: {
-          text: prompt,
-          imageUrl: imgURL,
-          sessionId: senderId
+    try {
+      // -----------------------------
+      // 🌐 API GPT-5 Nano
+      // -----------------------------
+      const res = await axios.get(
+        "https://api.nekolabs.web.id/text-generation/gpt/5-nano",
+        {
+          params: {
+            text: message,
+            imageUrl: imgURL,
+            sessionId: senderId
+          }
         }
+      );
+
+      if (!res.data?.success) throw new Error("API Error");
+
+      const aiText = res.data.result.trim();
+      const chunks = splitMessage(aiText);
+
+      for (let i = 0; i < chunks.length; i++) {
+        let txt = chunks[i];
+        if (i === 0) txt = header + txt;
+        if (i === chunks.length - 1) txt += footer;
+        await sendMessage(senderId, { text: txt }, token);
       }
-    );
 
-    if (!res.data?.success) {
-      throw new Error("API returned error");
+    } catch (e) {
+      console.error("❌ AI Error:", e.message);
+      await sendMessage(
+        senderId,
+        { text: header + "❌ Impossible d’analyser l’image ou le texte." + footer },
+        token
+      );
     }
+  },
 
-    const aiText = res.data.result.trim();
-    const chunks = splitMessage(aiText);
+  // =====================================
+  // Fonction automatique pour détecter image sans taper 'ai'
+  // =====================================
+  async auto(senderId, imageUrl, token) {
+    const imgURL = await uploadToImgBB(imageUrl);
+    if (!imgURL) return sendMessage(senderId, { text: "❌ Image invalide." }, token);
 
-    for (let i = 0; i < chunks.length; i++) {
-      let msg = chunks[i];
-      if (i === 0) msg = header + msg;
-      if (i === chunks.length - 1) msg += footer;
-      await sendMessage(senderId, { text: msg }, pageAccessToken);
+    const header = "💬 | Anime Focus AI\n・────────────・\n";
+    const footer = "\n・──── >ᴗ< ─────・";
+
+    try {
+      const res = await axios.get(
+        "https://api.nekolabs.web.id/text-generation/gpt/5-nano",
+        {
+          params: {
+            text: "Analyse cette image",
+            imageUrl: imgURL,
+            sessionId: senderId
+          }
+        }
+      );
+
+      if (!res.data?.success) throw new Error();
+
+      const chunks = splitMessage(res.data.result.trim());
+      for (let i = 0; i < chunks.length; i++) {
+        let txt = chunks[i];
+        if (i === 0) txt = header + txt;
+        if (i === chunks.length - 1) txt += footer;
+        await sendMessage(senderId, { text: txt }, token);
+      }
+
+    } catch (e) {
+      await sendMessage(senderId, { text: header + "❌ Impossible d’analyser l’image." + footer }, token);
     }
-
-  } catch (e) {
-    console.error("❌ AI Error:", e.message);
-    await sendMessage(
-      senderId,
-      { text: header + "❌ Impossible d’analyser l’image ou le texte." + footer },
-      pageAccessToken
-    );
   }
 };
