@@ -38,7 +38,7 @@ module.exports = {
       return sendMessage(senderId, { text: '⚠️ Please provide a question.\nUsage: -ai <your question>' }, pageAccessToken);
     }
 
-    await sendMessage(senderId, { text: '💬 Asking Anime Focus AI, please wait...' }, pageAccessToken);
+    await sendMessage(senderId, { text: '' }, pageAccessToken);
 
     try {
       // Si l'utilisateur a reply à une image, on récupère son URL
