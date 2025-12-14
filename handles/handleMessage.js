@@ -53,7 +53,13 @@ const handleMessage = async (event, pageAccessToken) => {
   }
   
   if (!messageText) return;
-  
+
+  // 🔹 Vérifier si l'utilisateur répond mp3/mp4 pour music
+  if (global.musicChoice?.[senderId]) {
+    const handled = await commands.get('music').handleChoice(senderId, messageText, pageAccessToken);
+    if (handled) return; // On arrête ici si le choix a été géré
+  }
+
   const isCommand = messageText.startsWith(prefix);
   const [commandName, ...args] = isCommand 
     ? messageText.slice(prefix.length).split(' ')
@@ -67,7 +73,6 @@ const handleMessage = async (event, pageAccessToken) => {
     if (command) {
       await command.execute(senderId, args, pageAccessToken, event, sendMessage, imageCache);
     } else if (commands.has('ai')) {
-
       await commands.get('ai').execute(senderId, [messageText], pageAccessToken, event, sendMessage, imageCache);
     } else {
       await sendMessage(senderId, { text: 'Unknown command. Type "help" for available commands.' }, pageAccessToken);
