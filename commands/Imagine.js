@@ -8,56 +8,62 @@ module.exports = {
   author: 'kelvin',
 
   async execute(senderId, args, pageAccessToken) {
-    if (args.length === 0) {
+    if (!args || args.length === 0) {
       return sendMessage(
         senderId,
-        { text: '⚠️ Please provide a prompt.\nExample: -imagine anime girl 16:9' },
+        { text: '⚠️ Veuillez fournir un prompt.\nExemple: -imagine anime girl 16:9' },
         pageAccessToken
       );
     }
 
-    // Detect ratio at end of prompt
+    // Detect ratio at end of prompt (e.g. 16:9)
     let ratio = '1:1';
     const lastArg = args[args.length - 1];
-
     if (/^\d+:\d+$/.test(lastArg)) {
       ratio = lastArg;
       args.pop();
     }
 
     const prompt = args.join(' ').trim();
-
-    // ✅ NEW API URL
-    const apiUrl = `https://api.nekolabs.web.id/image-generation/imagen/4.0-fast?prompt=${encodeURIComponent(prompt)}&ratio=${encodeURIComponent(ratio)}`;
+    const apiUrl = 'https://api.nekolabs.web.id/image-generation/imagen/4.0-fast';
 
     try {
-      const { data } = await axios.get(apiUrl);
+      // Optional: tell user generation started
+      await sendMessage(
+        senderId,
+        { text: '⏳ Génération de l\'image en cours, veuillez patienter...' },
+        pageAccessToken
+      );
+
+      // Call API with axios params so encoding is handled
+      const { data } = await axios.get(apiUrl, {
+        params: { prompt, ratio },
+        timeout: 30000
+      });
 
       if (!data || !data.success || !data.result) {
         return sendMessage(
           senderId,
-          { text: '❌ Failed to generate image. Please try again later.' },
+          { text: '❌ Échec de la génération de l\'image. Réessayez plus tard.' },
           pageAccessToken
         );
       }
 
-      // Send the text message before the image
-      await sendMessage(
-        senderId,
-        {
-          text: `✨ *AI Image Created!*\n🎨 Prompt: ${prompt}\n🖼️ Ratio: ${ratio}\n🕒 Response Time: ${data.responseTime || 'N/A'}`,
-        },
-        pageAccessToken
-      );
+      // API returns a URL string (or possibly an array) in result
+      const imageUrl = Array.isArray(data.result) ? data.result[0] : data.result;
 
-      // Send the generated image
+      // Send info text first (includes responseTime and timestamp when available)
+      const infoText = `✨ AI Image Created!\n🎨 Prompt: ${prompt}\n🖼️ Ratio: ${ratio}\n🕒 Response Time: ${data.responseTime || 'N/A'}\n📅 Timestamp: ${data.timestamp || 'N/A'}`;
+      await sendMessage(senderId, { text: infoText }, pageAccessToken);
+
+      // Then send the generated image
       await sendMessage(
         senderId,
         {
           attachment: {
             type: 'image',
             payload: {
-              url: data.result,
+              url: imageUrl,
               is_reusable: true
             }
           }
@@ -66,10 +72,15 @@ module.exports = {
       );
 
     } catch (error) {
-      console.error('Imagine Command Error:', error.message || error);
+      // better logging for debugging (include response body when available)
+      console.error(
+        'Imagine Command Error:',
+        error.response ? (error.response.data || error.response.statusText) : (error.message || error)
+      );
+
       return sendMessage(
         senderId,
-        { text: '🚨 An error occurred while generating the image. Please try again later.' },
+        { text: '🚨 Une erreur est survenue lors de la génération de l\'image. Veuillez réessayer plus tard.' },
         pageAccessToken
       );
     }
