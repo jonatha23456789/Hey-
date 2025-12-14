@@ -1,6 +1,7 @@
 const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
 
+// Découpe texte en chunks si trop long
 function splitMessage(text, maxLength = 1900) {
   const chunks = [];
   for (let i = 0; i < text.length; i += maxLength) {
@@ -9,24 +10,43 @@ function splitMessage(text, maxLength = 1900) {
   return chunks;
 }
 
+// Récupère l'URL de l'image reply si disponible
+async function getImageUrlFromEvent(event, token) {
+  const mid = event?.message?.reply_to?.mid;
+  if (!mid) return null;
+
+  try {
+    const { data } = await axios.get(`https://graph.facebook.com/v23.0/${mid}/attachments`, {
+      params: { access_token: token }
+    });
+    return data?.data?.[0]?.image_data?.url || data?.data?.[0]?.file_url || null;
+  } catch (err) {
+    console.error('Error fetching reply image:', err.message);
+    return null;
+  }
+}
+
 module.exports = {
   name: 'ai',
-  description: 'Answer to questions',
-  usage: '-ai <your question>',
+  description: 'Answer to questions (can use image you reply to)',
+  usage: '-ai <your question> (reply to an image optionally)',
   author: 'Jonathan',
 
-  async execute(senderId, args, pageAccessToken) {
+  async execute(senderId, args, pageAccessToken, event) {
     const question = args.join(' ').trim();
     if (!question) {
       return sendMessage(senderId, { text: '⚠️ Please provide a question.\nUsage: -ai <your question>' }, pageAccessToken);
     }
 
-    // Message de chargement
     await sendMessage(senderId, { text: '💬 Asking Anime Focus AI, please wait...' }, pageAccessToken);
 
     try {
-      const encodedQuestion = encodeURIComponent(question);
-      const apiUrl = `https://api.nekolabs.web.id/text-generation/gpt/4.1-nano?text=${encodedQuestion}&imageUrl=https%3A%2F%2Fapi.nekolabs.web.id%2Fali-oss%2Fv1%2Fnekoo_1765675310661.jpg&sessionId=61554245590654`;
+      // Si l'utilisateur a reply à une image, on récupère son URL
+      const imageUrl = await getImageUrlFromEvent(event, pageAccessToken);
+
+      // Construire l'URL API avec image si disponible
+      let apiUrl = `https://api.nekolabs.web.id/text-generation/gpt/4.1-nano?text=${encodeURIComponent(question)}&sessionId=61554245590654`;
+      if (imageUrl) apiUrl += `&imageUrl=${encodeURIComponent(imageUrl)}`;
 
       const { data } = await axios.get(apiUrl);
 
@@ -35,7 +55,6 @@ module.exports = {
       }
 
       let aiResponse = data.result.trim();
-
       const header = '💬 | Anime Focus Ai\n・────────────・';
       const footer = '\n・──── >ᴗ< ─────・';
 
