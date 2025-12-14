@@ -5,7 +5,7 @@ const { sendMessage } = require("../handles/sendMessage");
 const IMGBB_API_KEY = "2ef14dcf2beb6dbe0c444790faed0cc0";
 
 // ============================
-// 🖼️ Upload image to ImgBB
+// Upload image to ImgBB
 // ============================
 async function uploadToImgBB(url) {
   try {
@@ -27,82 +27,61 @@ async function uploadToImgBB(url) {
 }
 
 // ============================
-// ✂ Split long text (FB limit)
+// Split long messages
 // ============================
-function splitMessage(text, max = 1800) {
-  return text.match(new RegExp(`.{1,${max}}`, "g")) || [];
+function splitMessage(text, maxLength = 1800) {
+  return text.match(new RegExp(`.{1,${maxLength}}`, "g")) || [];
 }
 
 // ============================
-// 🤖 AI COMMAND
+// Fonction auto → analyse texte ou image
 // ============================
-module.exports = {
-  name: "ai",
-  description: "Answer all questions and analyze & describe images",
-  usage: "ai <question> OR reply to an image",
-  author: "coffee",
-
-  async execute(senderId, args, token, event) {
-    const question = args.join(" ").trim() || "Describe this image";
-    let imageUrl = "";
-
-    // ============================
-    // 📸 Detect image (reply)
-    // ============================
-    if (
-      event.messageReply &&
-      event.messageReply.attachments &&
-      event.messageReply.attachments[0]?.type === "photo"
-    ) {
-      const imageLink = event.messageReply.attachments[0].url;
-      imageUrl = await uploadToImgBB(imageLink);
+module.exports.auto = async function(senderId, imageUrl = "", pageAccessToken, text = "") {
+  let imgURL = "";
+  if (imageUrl) {
+    imgURL = await uploadToImgBB(imageUrl);
+    if (!imgURL) {
+      return sendMessage(senderId, { text: "❌ Impossible d’uploader l’image." }, pageAccessToken);
     }
+  }
 
-    const header = "💬 | Anime Focus AI\n・────────────・\n";
-    const footer = "\n・──── >ᴗ< ─────・";
+  const prompt = text || "Analyse cette image et décris-la.";
 
-    try {
-      // ============================
-      // 🌐 GPT-5 Nano Vision API
-      // ============================
-      const res = await axios.get(
-        "https://api.nekolabs.web.id/text-generation/gpt/5-nano",
-        {
-          params: {
-            text: question,
-            imageUrl: imageUrl || "",
-            sessionId: senderId
-          }
+  const header = "💬 | Anime Focus Ai\n・────────────・\n";
+  const footer = "\n・──── >ᴗ< ─────・";
+
+  try {
+    const res = await axios.get(
+      "https://api.nekolabs.web.id/text-generation/gpt/5-nano",
+      {
+        params: {
+          text: prompt,
+          imageUrl: imgURL,
+          sessionId: senderId
         }
-      );
-
-      if (!res.data?.success) {
-        throw new Error("API failed");
       }
+    );
 
-      const answer = res.data.result.trim();
-      const parts = splitMessage(answer);
-
-      for (let i = 0; i < parts.length; i++) {
-        let msg = parts[i];
-        if (i === 0) msg = header + msg;
-        if (i === parts.length - 1) msg += footer;
-
-        await sendMessage(senderId, { text: msg }, token);
-      }
-
-    } catch (e) {
-      console.error("❌ AI Error:", e.message);
-      await sendMessage(
-        senderId,
-        {
-          text:
-            header +
-            "❌ I couldn’t process your request. Please try again." +
-            footer
-        },
-        token
-      );
+    if (!res.data?.success) {
+      throw new Error("API returned error");
     }
+
+    const aiText = res.data.result.trim();
+    const chunks = splitMessage(aiText);
+
+    for (let i = 0; i < chunks.length; i++) {
+      let msg = chunks[i];
+      if (i === 0) msg = header + msg;
+      if (i === chunks.length - 1) msg += footer;
+      await sendMessage(senderId, { text: msg }, pageAccessToken);
+    }
+
+  } catch (e) {
+    console.error("❌ AI Error:", e.message);
+    await sendMessage(
+      senderId,
+      { text: header + "❌ Impossible d’analyser l’image ou le texte." + footer },
+      pageAccessToken
+    );
   }
 };
