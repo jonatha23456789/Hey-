@@ -1,14 +1,15 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const FormData = require('form-data');
 const { sendMessage } = require('../handles/sendMessage');
 
-global.musicChoice = {}; // Stocke l'état mp3/mp4 par utilisateur
-global.musicCache = {};  // Stocke le résultat de recherche par utilisateur
+global.musicChoice = {}; 
+global.musicCache = {};  
 
 module.exports = {
     name: 'music',
-    description: 'Searches for songs on YouTube and provides audio/video links.',
+    description: 'Search songs on YouTube and send audio/video.',
     usage: '-music <song name>',
     author: 'coffee',
 
@@ -24,23 +25,19 @@ module.exports = {
                 return sendMessage(senderId, { text: '❌ No songs found.' }, pageAccessToken);
             }
 
-            // On stocke le résultat pour l'utilisateur
-            global.musicCache[senderId] = data.result;
+            global.musicCache[senderId] = data.result.slice(0, 5);
 
-            // On affiche les 5 premiers résultats
-            const resultsText = data.result.slice(0, 5)
-                .map((song, i) => `${i + 1}. ${song.title} (${song.duration}) - ${song.channel}`)
+            const resultsText = global.musicCache[senderId]
+                .map((s, i) => `${i + 1}. ${s.title} (${s.duration}) - ${s.channel}`)
                 .join('\n');
 
             await sendMessage(senderId, {
-                text: `🎵 Songs found:\n\n${resultsText}\n\nReply with the number of the song and "mp3" or "mp4" to download.\nExample: 1 mp3`
+                text: `🎵 Songs found:\n\n${resultsText}\n\nReply with the number and type: e.g. "1 mp3" or "2 mp4"`
             }, pageAccessToken);
 
-            // On attend la réponse mp3/mp4
             global.musicChoice[senderId] = true;
-
         } catch (err) {
-            console.error('Music command error:', err.message);
+            console.error(err);
             sendMessage(senderId, { text: '❌ Failed to fetch songs.' }, pageAccessToken);
         }
     },
@@ -53,43 +50,58 @@ module.exports = {
 
         const index = parseInt(match[1], 10) - 1;
         const format = match[2].toLowerCase();
-
         const songs = global.musicCache[senderId];
+
         if (!songs || index < 0 || index >= songs.length) {
             await sendMessage(senderId, { text: '❌ Invalid song number.' }, pageAccessToken);
             return true;
         }
 
         const song = songs[index];
-        const url = song.url;
 
         try {
             await sendMessage(senderId, { text: `⏳ Downloading "${song.title}" as ${format}...` }, pageAccessToken);
 
-            const downloadRes = await axios.get(`https://api.nekolabs.web.id/download/youtube?url=${encodeURIComponent(url)}&type=${format}`, {
+            // Télécharger le fichier
+            const downloadRes = await axios.get(`https://api.nekolabs.web.id/download/youtube?url=${encodeURIComponent(song.url)}&type=${format}`, {
                 responseType: 'arraybuffer'
             });
 
             const tmpFile = path.join(__dirname, `tmp_${Date.now()}.${format}`);
             fs.writeFileSync(tmpFile, downloadRes.data);
 
-            // Envoi du fichier
-            await sendMessage(senderId, {
-                attachment: {
-                    type: format === 'mp3' ? 'audio' : 'video',
-                    payload: { url: `file://${tmpFile}` } // Facebook peut supporter stream ou uploader via API, à adapter selon ton bot
+            // Préparer upload vers Messenger
+            const form = new FormData();
+            form.append('message', JSON.stringify({
+                attachment: { type: format === 'mp3' ? 'audio' : 'video', payload: { is_reusable: true } }
+            }));
+            form.append('filedata', fs.createReadStream(tmpFile));
+
+            const uploadRes = await axios.post(
+                `https://graph.facebook.com/v22.0/me/message_attachments?access_token=${pageAccessToken}`,
+                form,
+                { headers: form.getHeaders() }
+            );
+
+            const attachmentId = uploadRes.data.attachment_id;
+
+            // Envoyer le fichier via Messenger
+            await axios.post(
+                `https://graph.facebook.com/v22.0/me/messages?access_token=${pageAccessToken}`,
+                {
+                    recipient: { id: senderId },
+                    message: { attachment: { type: format === 'mp3' ? 'audio' : 'video', payload: { attachment_id: attachmentId } } }
                 }
-            }, pageAccessToken);
+            );
 
             fs.unlinkSync(tmpFile);
 
-            // On supprime l'état utilisateur
             delete global.musicChoice[senderId];
             delete global.musicCache[senderId];
 
         } catch (err) {
-            console.error('Error downloading music:', err.message);
-            await sendMessage(senderId, { text: '❌ Error downloading the file.' }, pageAccessToken);
+            console.error('Error sending music:', err.message);
+            await sendMessage(senderId, { text: '❌ Error downloading or sending the file.' }, pageAccessToken);
         }
 
         return true;
