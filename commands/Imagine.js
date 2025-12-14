@@ -3,86 +3,49 @@ const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
   name: 'imagine',
-  description: 'Create an AI image using Nekolabs API 4.0-fast (custom ratio supported).',
-  usage: '-imagine <prompt> [ratio]',
-  author: 'kelvin',
+  description: 'Create an AI image using Nekolabs API 4.0-fast (custom ratio supported)',
+  usage: '-imagine <prompt> [ratio 1:1, 16:9, 9:16]',
+  author: 'Jonathan',
 
   async execute(senderId, args, pageAccessToken) {
-    if (!args || args.length === 0) {
-      return sendMessage(
-        senderId,
-        { text: '⚠️ Veuillez fournir un prompt.\nExemple: -imagine anime girl 16:9' },
-        pageAccessToken
-      );
-    }
-
-    // Detect ratio at end of prompt (e.g. 16:9)
-    let ratio = '1:1';
-    const lastArg = args[args.length - 1];
-    if (/^\d+:\d+$/.test(lastArg)) {
-      ratio = lastArg;
-      args.pop();
-    }
-
     const prompt = args.join(' ').trim();
-    const apiUrl = 'https://api.nekolabs.web.id/image-generation/imagen/4.0-fast';
+    if (!prompt) {
+      return sendMessage(senderId, { text: '⚠️ Please provide a prompt.\nUsage: -imagine <prompt> [ratio]' }, pageAccessToken);
+    }
+
+    // Détecter un ratio dans le prompt (ex: 1:1, 16:9, 9:16) à la fin
+    let ratio = '1:1';
+    const ratioMatch = prompt.match(/\b(1:1|16:9|9:16)\b$/);
+    let finalPrompt = prompt;
+    if (ratioMatch) {
+      ratio = ratioMatch[0];
+      finalPrompt = prompt.replace(ratio, '').trim();
+    }
+
+    await sendMessage(senderId, { text: '🎨 Generating your AI image, please wait...' }, pageAccessToken);
 
     try {
-      // Optional: tell user generation started
-      await sendMessage(
-        senderId,
-        { text: '⏳ Génération de l\'image en cours, veuillez patienter...' },
-        pageAccessToken
-      );
+      const apiUrl = `https://api.nekolabs.web.id/image-generation/imagen/4.0-fast?prompt=${encodeURIComponent(finalPrompt)}&ratio=${encodeURIComponent(ratio)}`;
 
-      // Call API with axios params so encoding is handled
-      const { data } = await axios.get(apiUrl, {
-        params: { prompt, ratio },
-        timeout: 30000
-      });
+      const { data } = await axios.get(apiUrl);
 
-      if (!data || !data.success || !data.result) {
-        return sendMessage(
-          senderId,
-          { text: '❌ Échec de la génération de l\'image. Réessayez plus tard.' },
-          pageAccessToken
-        );
+      if (!data.success || !data.result) {
+        return sendMessage(senderId, { text: '❌ Failed to generate image from AI.' }, pageAccessToken);
       }
 
-      // API returns a URL string (or possibly an array) in result
-      const imageUrl = Array.isArray(data.result) ? data.result[0] : data.result;
+      const imageUrl = data.result;
 
-      // Send info text first (includes responseTime and timestamp when available)
-      const infoText = `✨ AI Image Created!\n🎨 Prompt: ${prompt}\n🖼️ Ratio: ${ratio}\n🕒 Response Time: ${data.responseTime || 'N/A'}\n📅 Timestamp: ${data.timestamp || 'N/A'}`;
-      await sendMessage(senderId, { text: infoText }, pageAccessToken);
+      // Envoi de l'image
+      await sendMessage(senderId, {
+        attachment: { type: 'image', payload: { url: imageUrl, is_reusable: true } }
+      }, pageAccessToken);
 
-      // Then send the generated image
-      await sendMessage(
-        senderId,
-        {
-          attachment: {
-            type: 'image',
-            payload: {
-              url: imageUrl,
-              is_reusable: true
-            }
-          }
-        },
-        pageAccessToken
-      );
+      // Optionnel : envoyer le lien direct
+      await sendMessage(senderId, { text: `✅ Image generated successfully!\n🌐 Direct URL: ${imageUrl}` }, pageAccessToken);
 
     } catch (error) {
-      // better logging for debugging (include response body when available)
-      console.error(
-        'Imagine Command Error:',
-        error.response ? (error.response.data || error.response.statusText) : (error.message || error)
-      );
-
-      return sendMessage(
-        senderId,
-        { text: '🚨 Une erreur est survenue lors de la génération de l\'image. Veuillez réessayer plus tard.' },
-        pageAccessToken
-      );
+      console.error('Imagine Command Error:', error.message || error);
+      await sendMessage(senderId, { text: '❌ An error occurred while generating the image.' }, pageAccessToken);
     }
   }
 };
