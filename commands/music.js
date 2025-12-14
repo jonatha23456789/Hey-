@@ -1,74 +1,97 @@
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 const { sendMessage } = require('../handles/sendMessage');
 
+global.musicChoice = {}; // Stocke l'état mp3/mp4 par utilisateur
+global.musicCache = {};  // Stocke le résultat de recherche par utilisateur
+
 module.exports = {
-  name: 'music',
-  description: 'Searches YouTube and sends MP3 or MP4 based on your choice',
-  usage: '-music <song name>',
-  author: 'coffee',
+    name: 'music',
+    description: 'Searches for songs on YouTube and provides audio/video links.',
+    usage: '-music <song name>',
+    author: 'coffee',
 
-  async execute(senderId, args, pageAccessToken, event, sendMessage, imageCache) {
-    if (!args.length) return sendMessage(senderId, { text: '❌ Please provide a song name.' }, pageAccessToken);
+    async execute(senderId, args, pageAccessToken) {
+        if (!args.length) return sendMessage(senderId, { text: '❌ Please provide a song title.' }, pageAccessToken);
 
-    const query = encodeURIComponent(args.join(' '));
-    const apiUrl = `https://api.nekolabs.web.id/discovery/youtube/search?q=${query}`;
+        const query = encodeURIComponent(args.join(' '));
+        const apiUrl = `https://api.nekolabs.web.id/discovery/youtube/search?q=${query}`;
 
-    try {
-      const { data } = await axios.get(apiUrl);
+        try {
+            const { data } = await axios.get(apiUrl);
+            if (!data.success || !data.result || !data.result.length) {
+                return sendMessage(senderId, { text: '❌ No songs found.' }, pageAccessToken);
+            }
 
-      if (!data.success || !data.result || data.result.length === 0) {
-        return sendMessage(senderId, { text: '❌ No results found.' }, pageAccessToken);
-      }
+            // On stocke le résultat pour l'utilisateur
+            global.musicCache[senderId] = data.result;
 
-      const video = data.result[0]; // premier résultat
+            // On affiche les 5 premiers résultats
+            const resultsText = data.result.slice(0, 5)
+                .map((song, i) => `${i + 1}. ${song.title} (${song.duration}) - ${song.channel}`)
+                .join('\n');
 
-      // Envoyer les infos et demander choix MP3 ou MP4
-      await sendMessage(senderId, {
-        text: `🎵 *YouTube Music Result*\nTitle: ${video.title}\nChannel: ${video.channel}\nDuration: ${video.duration}\n\nRépondez par :\n- \`mp3\` pour le son\n- \`mp4\` pour la vidéo`
-      }, pageAccessToken);
+            await sendMessage(senderId, {
+                text: `🎵 Songs found:\n\n${resultsText}\n\nReply with the number of the song and "mp3" or "mp4" to download.\nExample: 1 mp3`
+            }, pageAccessToken);
 
-      // Stocker temporairement le lien et l'ID pour le suivi du choix
-      global.musicChoice = global.musicChoice || {};
-      global.musicChoice[senderId] = video.url;
+            // On attend la réponse mp3/mp4
+            global.musicChoice[senderId] = true;
 
-    } catch (error) {
-      console.error('Music Search Error:', error.message || error);
-      await sendMessage(senderId, { text: '❌ An error occurred while searching for music.' }, pageAccessToken);
+        } catch (err) {
+            console.error('Music command error:', err.message);
+            sendMessage(senderId, { text: '❌ Failed to fetch songs.' }, pageAccessToken);
+        }
+    },
+
+    async handleChoice(senderId, messageText, pageAccessToken) {
+        if (!global.musicChoice[senderId]) return false;
+
+        const match = messageText.match(/^(\d+)\s*(mp3|mp4)$/i);
+        if (!match) return false;
+
+        const index = parseInt(match[1], 10) - 1;
+        const format = match[2].toLowerCase();
+
+        const songs = global.musicCache[senderId];
+        if (!songs || index < 0 || index >= songs.length) {
+            await sendMessage(senderId, { text: '❌ Invalid song number.' }, pageAccessToken);
+            return true;
+        }
+
+        const song = songs[index];
+        const url = song.url;
+
+        try {
+            await sendMessage(senderId, { text: `⏳ Downloading "${song.title}" as ${format}...` }, pageAccessToken);
+
+            const downloadRes = await axios.get(`https://api.nekolabs.web.id/download/youtube?url=${encodeURIComponent(url)}&type=${format}`, {
+                responseType: 'arraybuffer'
+            });
+
+            const tmpFile = path.join(__dirname, `tmp_${Date.now()}.${format}`);
+            fs.writeFileSync(tmpFile, downloadRes.data);
+
+            // Envoi du fichier
+            await sendMessage(senderId, {
+                attachment: {
+                    type: format === 'mp3' ? 'audio' : 'video',
+                    payload: { url: `file://${tmpFile}` } // Facebook peut supporter stream ou uploader via API, à adapter selon ton bot
+                }
+            }, pageAccessToken);
+
+            fs.unlinkSync(tmpFile);
+
+            // On supprime l'état utilisateur
+            delete global.musicChoice[senderId];
+            delete global.musicCache[senderId];
+
+        } catch (err) {
+            console.error('Error downloading music:', err.message);
+            await sendMessage(senderId, { text: '❌ Error downloading the file.' }, pageAccessToken);
+        }
+
+        return true;
     }
-  },
-
-  async handleChoice(senderId, text, pageAccessToken) {
-    const videoUrl = global.musicChoice?.[senderId];
-    if (!videoUrl) return false;
-
-    const choice = text.toLowerCase();
-    if (!['mp3', 'mp4'].includes(choice)) return false;
-
-    try {
-      let downloadUrl = '';
-
-      if (choice === 'mp3') {
-        const { data } = await axios.get(`https://api.nekolabs.web.id/youtube/audio?url=${encodeURIComponent(videoUrl)}`);
-        downloadUrl = data.result?.url;
-      } else if (choice === 'mp4') {
-        const { data } = await axios.get(`https://api.nekolabs.web.id/youtube/video?url=${encodeURIComponent(videoUrl)}`);
-        downloadUrl = data.result?.url;
-      }
-
-      if (!downloadUrl) {
-        return sendMessage(senderId, { text: '❌ Failed to fetch download link.' }, pageAccessToken);
-      }
-
-      const type = choice === 'mp3' ? 'audio' : 'video';
-      await sendMessage(senderId, { attachment: { type, payload: { url: downloadUrl } } }, pageAccessToken);
-
-      delete global.musicChoice[senderId];
-      return true;
-
-    } catch (err) {
-      console.error('Music Download Error:', err.message || err);
-      await sendMessage(senderId, { text: '❌ Error downloading the file.' }, pageAccessToken);
-      return true;
-    }
-  }
 };
