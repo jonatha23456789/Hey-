@@ -1,27 +1,24 @@
-const fs = require('fs');
-const path = require('path');
-const { sendMessage } = require('./sendMessage');
-const alldl = require('../commands/alldl');
-
-const commands = new Map();
-const prefix = '-';
-
-// Charger toutes les commandes
-fs.readdirSync(path.join(__dirname, '../commands'))
-  .filter(file => file.endsWith('.js'))
-  .forEach(file => {
-    const command = require(`../commands/${file}`);
-    commands.set(command.name.toLowerCase(), command);
-  });
-
 async function handleMessage(event, pageAccessToken) {
   const senderId = event?.sender?.id;
-  if (!senderId) return console.error('Invalid event object');
+  if (!senderId) return;
 
   const messageText = event?.message?.text?.trim();
-  if (!messageText) return console.log('Received event without message text');
+  if (!messageText) return;
 
-  // ⛔ Auto-download (ALDDL) si lien détecté
+  /* =====================================================
+   🎯 PRIORITÉ 1 — REPLY YOUTUBE
+  ===================================================== */
+  if (event.messageReply && global.youtubeChoices?.[senderId]) {
+    const yt = commands.get("youtube");
+    if (yt?.reply) {
+      console.log("🎯 YouTube reply intercepted");
+      return yt.reply(senderId, messageText, pageAccessToken, event);
+    }
+  }
+
+  /* =====================================================
+   🔗 PRIORITÉ 2 — AUTO DOWNLOAD (ALDDL)
+  ===================================================== */
   const urlRegex = /(https?:\/\/[^\s]+)/gi;
   if (urlRegex.test(messageText)) {
     try {
@@ -33,21 +30,17 @@ async function handleMessage(event, pageAccessToken) {
     }
   }
 
-  // 🌍 Auto traduction si activée
+  /* =====================================================
+   🌍 PRIORITÉ 3 — AUTO TRANSLATE
+  ===================================================== */
   const autoTranslate = commands.get("autotranslate");
-  if (autoTranslate && autoTranslate.auto) {
-      await autoTranslate.auto(senderId, messageText, pageAccessToken, sendMessage);
+  if (autoTranslate?.auto) {
+    await autoTranslate.auto(senderId, messageText, pageAccessToken, sendMessage);
   }
 
-  // 🎯 INTERCEPTION REPLY → YOUTUBE (IMPORTANT)
-  if (event.messageReply && global.youtubeChoices && global.youtubeChoices[senderId]) {
-    const yt = commands.get("youtube");
-    if (yt && yt.reply) {
-        return yt.reply(senderId, messageText, pageAccessToken, event);
-    }
-  }
-
-  // 🔥 System normal des commandes
+  /* =====================================================
+   🔥 PRIORITÉ 4 — COMMANDES / AI
+  ===================================================== */
   const [commandName, ...args] = messageText.startsWith(prefix)
     ? messageText.slice(prefix.length).split(' ')
     : messageText.split(' ');
@@ -55,8 +48,6 @@ async function handleMessage(event, pageAccessToken) {
   const normalizedCommand = commandName.toLowerCase();
 
   try {
-    console.log(`Received command: ${normalizedCommand}, args: ${args.join(' ')}`);
-
     if (commands.has(normalizedCommand)) {
       await commands.get(normalizedCommand).execute(
         senderId,
@@ -73,19 +64,9 @@ async function handleMessage(event, pageAccessToken) {
         event,
         sendMessage
       );
-    } else {
-      await sendMessage(
-        senderId,
-        { text: 'Unknown command and AI fallback is unavailable.' },
-        pageAccessToken
-      );
     }
-  } catch (error) {
-    console.error(`Error executing command:`, error);
-    await sendMessage(senderId, {
-      text: error.message || 'There was an error executing that command.'
-    }, pageAccessToken);
+  } catch (err) {
+    console.error(err);
+    await sendMessage(senderId, { text: "❌ Erreur interne." }, pageAccessToken);
   }
 }
-
-module.exports = { handleMessage };
