@@ -58,7 +58,7 @@ const handleMessage = async (event, pageAccessToken) => {
      🔹 GESTION DES RÉPONSES (CHOIX)
      =============================== */
 
-  // 🎬 Choix vidéo (video.js)
+  // 🎬 Choix vidéo
   if (global.videoChoice?.[senderId]) {
     const handled = await commands.get('video')?.handleChoice(
       senderId,
@@ -68,7 +68,7 @@ const handleMessage = async (event, pageAccessToken) => {
     if (handled) return;
   }
 
-  // 🎵 Choix music (si tu le gardes)
+  // 🎵 Choix music
   if (global.musicChoice?.[senderId]) {
     const handled = await commands.get('music')?.handleChoice(
       senderId,
@@ -76,6 +76,25 @@ const handleMessage = async (event, pageAccessToken) => {
       pageAccessToken
     );
     if (handled) return;
+  }
+
+  /* ===============================
+     🔹 AUTO DOWNLOAD LINK (IMPORTANT)
+     =============================== */
+
+  if (
+    messageText.match(/https?:\/\/[^\s]+/) &&
+    commands.has('autoalldl')
+  ) {
+    await commands.get('autoalldl').execute(
+      senderId,
+      [],
+      pageAccessToken,
+      event,
+      sendMessage,
+      imageCache
+    );
+    return; // ⛔ STOP ici (ne va PAS vers AI)
   }
 
   /* ===============================
