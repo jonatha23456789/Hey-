@@ -2,7 +2,7 @@ const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
-  name: 'autoalldl',
+  name: '',
   description: 'Detect and automatically download videos from shared links',
   usage: '-autoalldl <video link>',
   author: 'coffee',
