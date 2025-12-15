@@ -5,7 +5,7 @@ global.videoChoice = {};
 
 module.exports = {
   name: 'video',
-  description: 'Search YouTube videos and send selected video',
+  description: 'Search YouTube videos and send download link',
   usage: '-video <query>',
   author: 'coffee',
 
@@ -57,27 +57,37 @@ Reply with the number`
     delete global.videoChoice[senderId];
 
     try {
-      // 🔥 On récupère un lien vidéo DIRECT
       const res = await axios.get(
         `https://api.nekolabs.web.id/download/youtube?url=${encodeURIComponent(video.url)}&type=mp4`
       );
 
       const videoUrl = res.data.result;
       if (!videoUrl) {
-        return sendMessage(senderId, { text: '❌ Unable to fetch video.' }, pageAccessToken);
+        return sendMessage(senderId, { text: '❌ Unable to fetch video link.' }, pageAccessToken);
       }
 
-      // ✅ ENVOI DIRECT (PAS DE DOWNLOAD LOCAL)
+      // 🖼️ Miniature
       await sendMessage(senderId, {
         attachment: {
-          type: 'video',
-          payload: { url: videoUrl }
+          type: 'image',
+          payload: { url: video.cover }
         }
       }, pageAccessToken);
 
+      // 🔗 Lien cliquable
+      await sendMessage(senderId, {
+        text:
+`🎬 *${video.title}*
+⏱ Duration: ${video.duration}
+📺 Channel: ${video.channel}
+
+🔗 Download / Watch:
+${videoUrl}`
+      }, pageAccessToken);
+
     } catch (err) {
-      console.error('Video send error:', err.message);
-      await sendMessage(senderId, { text: '❌ Error sending video.' }, pageAccessToken);
+      console.error('Video link error:', err.message);
+      await sendMessage(senderId, { text: '❌ Error sending video link.' }, pageAccessToken);
     }
 
     return true;
