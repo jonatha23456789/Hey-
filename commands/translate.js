@@ -12,18 +12,14 @@ module.exports = {
     let textToTranslate = null;
     let targetLang = null;
 
-    const isReply = !!event?.message?.reply_to;
-
-    /* =========================
-       📌 CAS 1 : REPLY
-       ========================= */
-    if (isReply && args.length === 1) {
+    /* ===============================
+       🔹 CAS 1 : REPLY → -translate en
+       =============================== */
+    if (args.length === 1) {
       targetLang = args[0].toLowerCase();
 
-      textToTranslate =
-        event.message.reply_to?.message?.text ||
-        event.message.reply_to?.message?.attachments?.[0]?.payload?.url ||
-        null;
+      // On récupère le dernier message sauvegardé
+      textToTranslate = global.lastUserMessage?.[senderId];
 
       if (!textToTranslate) {
         return sendMessage(
@@ -34,17 +30,18 @@ module.exports = {
       }
     }
 
-    /* =========================
-       📌 CAS 2 : TEXTE NORMAL
-       ========================= */
-    else if (!isReply && args.length >= 2) {
+    /* ===============================
+       🔹 CAS 2 : TEXTE NORMAL
+       -translate hello fr
+       =============================== */
+    else if (args.length >= 2) {
       targetLang = args.pop().toLowerCase();
       textToTranslate = args.join(' ');
     }
 
-    /* =========================
+    /* ===============================
        ❌ MAUVAIS USAGE
-       ========================= */
+       =============================== */
     else {
       return sendMessage(
         senderId,
@@ -58,26 +55,33 @@ module.exports = {
       );
     }
 
+    /* ===============================
+       🌍 API TRANSLATE
+       =============================== */
     try {
-      const apiUrl = `https://miko-utilis.vercel.app/api/translate?to=${encodeURIComponent(
-        targetLang
-      )}&text=${encodeURIComponent(textToTranslate)}`;
+      const res = await axios.get(
+        `https://miko-utilis.vercel.app/api/translate`,
+        {
+          params: {
+            to: targetLang,
+            text: textToTranslate
+          }
+        }
+      );
 
-      const { data } = await axios.get(apiUrl);
-
-      if (!data?.success) {
+      if (!res.data?.success) {
         throw new Error('Translation failed');
       }
 
-      const translated = data.translated_text.translated;
+      const translated = res.data.translated_text.translated;
 
       const reply =
-`🌍 Translation
+`🌍 **Translation**
 
 📝 Original:
 ${textToTranslate}
 
-🔤 To: ${data.target_language}
+🔤 To: ${targetLang}
 ✅ Result:
 ${translated}`;
 
