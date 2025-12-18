@@ -1,11 +1,10 @@
-const { sendMessage } = require('../handles/sendMessage');
 const axios = require("axios");
 
 const pageid = '311549272052785';
 const kupal = ["8592033747492364"];
-const CREATOR_NAME = "Kelvin"; // 👤 change ici si tu veux
+const CREATOR_NAME = "Kelvin"; // 👤 nom du créateur
 
-// 📅 date/heure formatée
+// 📅 Date / heure
 function getDateTime() {
   const now = new Date();
   return now.toLocaleString('fr-FR', {
@@ -56,28 +55,26 @@ async function sendNotification(users, messagePayload, pageAccessToken) {
 module.exports = {
   name: 'noti',
   description: 'send notification to all users (text or image)',
-  author: 'Cliff',
   usage: 'noti [img] <message>',
 
-  async execute(senderId, args, pageAccessToken, event, sendMessageFn, imageCache) {
+  async execute(senderId, args, pageAccessToken, event, sendMessage, imageCache) {
 
+    // 🔒 Sécurité
     if (!kupal.includes(senderId)) {
-      return sendMessageFn(
-        senderId,
+      return sendMessage(senderId,
         { text: "This command is only for pagebot owner." },
         pageAccessToken
       );
     }
 
     if (!args.length) {
-      return sendMessageFn(
-        senderId,
+      return sendMessage(senderId,
         { text: 'Please provide a message.' },
         pageAccessToken
       );
     }
 
-    // 📸 mode image ?
+    // 📸 Mode image
     let withImage = false;
     if (args[0].toLowerCase() === 'img') {
       withImage = true;
@@ -97,41 +94,46 @@ module.exports = {
 
     const users = await getAllPSIDs(pageAccessToken);
 
-    await sendMessageFn(senderId, { text: 'Sending notifications...' }, pageAccessToken);
+    await sendMessage(senderId, { text: 'Sending notifications...' }, pageAccessToken);
 
-    // 🖼️ NOTI AVEC IMAGE
+    // 🖼️ IMAGE + TEXTE (UN SEUL MESSAGE)
     if (withImage) {
+
+      // 🔍 Image depuis reply
+      const replyImage =
+        event?.message?.reply_to?.message?.attachments?.[0]?.type === 'image'
+          ? event.message.reply_to.message.attachments[0].payload?.url
+          : null;
+
+      // 🔍 Image depuis cache
       const cachedImg = imageCache.get(senderId)?.url;
 
-      if (!cachedImg) {
-        return sendMessageFn(
-          senderId,
-          { text: '❌ Please send an image before using "noti img".' },
+      const imageUrl = replyImage || cachedImg;
+
+      if (!imageUrl) {
+        return sendMessage(senderId,
+          { text: '❌ Reply to an image or send an image before using `noti img`.' },
           pageAccessToken
         );
       }
 
-      // 1️⃣ envoyer texte
-      await sendNotification(
-        users,
-        { text: formattedText },
-        pageAccessToken
-      );
-
-      // 2️⃣ envoyer image
       await sendNotification(
         users,
         {
           attachment: {
             type: 'image',
-            payload: { url: cachedImg }
-          }
+            payload: {
+              url: imageUrl,
+              is_reusable: true
+            }
+          },
+          text: formattedText
         },
         pageAccessToken
       );
 
     } else {
-      // 📝 NOTI TEXTE SIMPLE
+      // 📝 TEXTE SEUL
       await sendNotification(
         users,
         { text: formattedText },
@@ -139,8 +141,7 @@ module.exports = {
       );
     }
 
-    await sendMessageFn(
-      senderId,
+    await sendMessage(senderId,
       { text: '✅ Notifications sent successfully.' },
       pageAccessToken
     );
