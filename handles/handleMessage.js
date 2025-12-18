@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const { sendMessage } = require('./sendMessage');
 
+global.lastUserMessage = global.lastUserMessage || {}; // ✅ AJOUT ICI
+
 const commands = new Map();
 const imageCache = new Map();
 const prefix = '-';
@@ -55,6 +57,14 @@ const handleMessage = async (event, pageAccessToken) => {
   if (!messageText) return;
 
   /* ===============================
+     🧠 SAVE LAST USER MESSAGE
+     (POUR REPLY TRANSLATE)
+     =============================== */
+  if (!messageText.startsWith(prefix)) {
+    global.lastUserMessage[senderId] = messageText;
+  }
+
+  /* ===============================
      🔹 GESTION DES RÉPONSES (CHOIX)
      =============================== */
 
@@ -79,9 +89,8 @@ const handleMessage = async (event, pageAccessToken) => {
   }
 
   /* ===============================
-     🔹 AUTO DOWNLOAD LINK (IMPORTANT)
+     🔹 AUTO DOWNLOAD LINK
      =============================== */
-
   if (
     messageText.match(/https?:\/\/[^\s]+/) &&
     commands.has('autoalldl')
@@ -94,7 +103,7 @@ const handleMessage = async (event, pageAccessToken) => {
       sendMessage,
       imageCache
     );
-    return; // ⛔ STOP ici (ne va PAS vers AI)
+    return;
   }
 
   /* ===============================
