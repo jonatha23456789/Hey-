@@ -33,25 +33,29 @@ module.exports = {
     else {
       return sendMessage(
         senderId,
-        { text: '❌ Usage:\n- Reply + `-translate en`\n- `-translate <text> <lang>`' },
+        {
+          text:
+            '❌ Usage:\n' +
+            '- Reply + `-translate en`\n' +
+            '- `-translate <text> <lang>`'
+        },
         pageAccessToken
       );
     }
 
     try {
-      const res = await axios.post(
-        'https://libretranslate.de/translate',
-        {
-          q: textToTranslate,
-          source: 'auto',
-          target: targetLang,
-          format: 'text'
-        },
-        { headers: { 'Content-Type': 'application/json' } }
-      );
+      // 🌐 API Miko Translate
+      const apiUrl = `https://miko-utilis.vercel.app/api/translate?to=${encodeURIComponent(
+        targetLang
+      )}&text=${encodeURIComponent(textToTranslate)}`;
 
-      const translated = res.data?.translatedText;
-      if (!translated) throw new Error('No translation');
+      const { data } = await axios.get(apiUrl);
+
+      if (!data?.success || !data?.translated_text?.translated) {
+        throw new Error('No translation returned');
+      }
+
+      const translated = data.translated_text.translated;
 
       const reply =
 `🌍 **Translation**
@@ -59,14 +63,14 @@ module.exports = {
 📝 Original:
 ${textToTranslate}
 
-🔤 To: ${targetLang}
+🔤 To: ${data.target_language}
 ✅ Result:
 ${translated}`;
 
       await sendMessage(senderId, { text: reply }, pageAccessToken);
 
     } catch (error) {
-      console.error('Translate error:', error.message);
+      console.error('Translate error:', error.message || error);
       await sendMessage(
         senderId,
         { text: '❌ Error while translating text.' },
