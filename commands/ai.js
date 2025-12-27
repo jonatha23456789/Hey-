@@ -27,7 +27,7 @@ module.exports = {
     }
 
     // ⏳ petit feedback
-    await sendMessage(senderId, { text: '🤖 Thinking...' }, pageAccessToken);
+    await sendMessage(senderId, { text: '' }, pageAccessToken);
 
     try {
       const apiUrl =
