@@ -2,7 +2,7 @@ const axios = require("axios");
 const { sendMessage } = require("../handles/sendMessage");
 
 // 🔐 ID ADMIN (TON PSID)
-const ADMIN_ID = "8592033747492364; // ← mets ton PSID ici
+const ADMIN_ID = "8592033747492364"; // ← mets ton PSID ici
 
 // 📅 Date / heure
 function getDateTime() {
