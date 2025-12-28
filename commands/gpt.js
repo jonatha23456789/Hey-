@@ -1,13 +1,22 @@
 const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
 
+// Découpe texte si trop long (limite Messenger)
+function splitMessage(text, maxLength = 1900) {
+  const chunks = [];
+  for (let i = 0; i < text.length; i += maxLength) {
+    chunks.push(text.slice(i, i + maxLength));
+  }
+  return chunks;
+}
+
 module.exports = {
   name: ['gpt'],
-  description: 'Chat with GPT-4.1 nano (Nekolabs)',
-  usage: '-gpt <question> (image optional)',
+  description: 'Chat with ChatGPT (Kohi API)',
+  usage: '-gpt <question>',
   author: 'kelvin',
 
-  async execute(senderId, args, pageAccessToken, event, sendMessageFn, imageCache) {
+  async execute(senderId, args, pageAccessToken) {
     const prompt = args.join(' ').trim();
 
     if (!prompt) {
@@ -18,21 +27,20 @@ module.exports = {
       );
     }
 
-    // 🖼 Image optionnelle (dernière image envoyée)
-    const imageUrl = imageCache?.get(senderId)?.url || '';
+    // ⏳ feedback optionnel
+    await sendMessage(senderId, { text: '' }, pageAccessToken);
 
-    const apiUrl = 'https://api.nekolabs.web.id/text-generation/gpt/4.1-nano';
+    const apiUrl = 'https://api-library-kohi.onrender.com/api/chatgpt';
 
     try {
       const { data } = await axios.get(apiUrl, {
         params: {
-          text: prompt,
-          imageUrl,
-          sessionId: senderId
+          prompt,
+          user: senderId
         }
       });
 
-      if (!data?.success || !data?.result) {
+      if (!data?.status || !data?.data) {
         return sendMessage(
           senderId,
           { text: '❌ No response from GPT API.' },
@@ -43,18 +51,18 @@ module.exports = {
       const deco = '・───── >ᴗ< ─────・';
       const reply =
 `${deco}
-💬 | GPT-4.1
+💬 | GPT
 
-${data.result}
+${data.data}
 
 ${deco}`;
 
-      // Découpage si trop long (Messenger limit)
-      const maxLength = 1900;
-      for (let i = 0; i < reply.length; i += maxLength) {
+      const chunks = splitMessage(reply);
+
+      for (const chunk of chunks) {
         await sendMessage(
           senderId,
-          { text: reply.slice(i, i + maxLength) },
+          { text: chunk },
           pageAccessToken
         );
       }
