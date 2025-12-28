@@ -34,34 +34,28 @@ module.exports = {
     try {
       const apiUrl = 'https://midjanuarybyxnil.onrender.com/imagine';
 
-      // 🔍 Vérifie si l’utilisateur a reply à une image
+      // 🔍 Image reply ou cache
       const replyImage = event?.message?.reply_to?.message?.attachments?.[0]?.payload?.url;
-
-      // 🔍 Sinon utilise image cache
       const cachedImg = imageCache?.get(senderId)?.url;
-
       const imageUrlParam = replyImage || cachedImg || '';
 
-      // ⚠️ API call
-      const response = await axios.get(apiUrl, {
-        params: { prompt, ratio, imageUrl: imageUrlParam },
-        responseType: 'stream'
+      // ⚠️ API call : renvoie JSON { success: true, result: <url> }
+      const { data } = await axios.get(apiUrl, {
+        params: { prompt, ratio, imageUrl: imageUrlParam }
       });
 
-      // ✅ URL finale de l’image générée
-      const imageUrl = response.request.res.responseUrl;
-
-      if (!imageUrl) {
+      if (!data.success || !data.result) {
         return sendMessageFn(
           senderId,
-          { text: '❌ Image generation failed.' },
+          { text: '❌ Image generation failed (API returned empty result).' },
           pageAccessToken
         );
       }
 
+      const imageUrl = data.result; // URL finale de l’image
       const deco = '・───── >ᴗ< ─────・';
 
-      // 📝 Envoi texte + image dans un seul message
+      // 📝 Envoi texte + image
       await sendMessageFn(
         senderId,
         {
@@ -76,10 +70,7 @@ ${prompt}
 ${deco}`,
           attachment: {
             type: 'image',
-            payload: {
-              url: imageUrl,
-              is_reusable: true
-            }
+            payload: { url: imageUrl, is_reusable: true }
           }
         },
         pageAccessToken
