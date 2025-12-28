@@ -3,7 +3,7 @@ const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
   name: 'imagine',
-  description: 'Generate AI images using MidJanuary API',
+  description: 'Generate AI images using Nekolabs Imagen 4.0-fast',
   usage: '-imagine <prompt> [1:1 | 16:9 | 9:16]',
   author: 'Jonathan',
 
@@ -16,7 +16,7 @@ module.exports = {
       );
     }
 
-    // 🔹 Extraire le ratio si spécifié
+    // 🔹 Détecter le ratio (dernier argument)
     let ratio = '1:1';
     const lastArg = args[args.length - 1];
     if (['1:1', '16:9', '9:16'].includes(lastArg)) {
@@ -28,7 +28,7 @@ module.exports = {
     if (!prompt) {
       return sendMessage(
         senderId,
-        { text: '⚠️ Veuillez fournir un prompt valide.' },
+        { text: '⚠️ Please provide a valid prompt.' },
         pageAccessToken
       );
     }
@@ -40,21 +40,28 @@ module.exports = {
     );
 
     try {
-      const apiUrl = 'https://midjanuarybyxnil.onrender.com/imagine';
-      const { data } = await axios.get(apiUrl, { params: { prompt, ratio } });
+      const apiUrl = 'https://api.nekolabs.web.id/img.gen/imagen/4.0-fast';
 
-      if (!data?.success || !data?.result) {
+      const { data } = await axios.get(apiUrl, {
+        params: {
+          prompt: prompt,
+          ratio: ratio
+        }
+      });
+
+      // ✅ Vérification stricte
+      if (!data || data.success !== true || !data.result) {
         return sendMessage(
           senderId,
-          { text: '❌ Image generation failed (API returned empty result).' },
+          { text: '❌ Image generation failed (invalid API response).' },
           pageAccessToken
         );
       }
 
-      const imageUrl = data.result; // ✅ l’URL de l’image générée
+      const imageUrl = data.result;
       const deco = '・───── >ᴗ< ─────・';
 
-      // 📝 Envoyer d’abord le texte de confirmation
+      // 📝 Texte
       await sendMessage(
         senderId,
         {
@@ -62,27 +69,32 @@ module.exports = {
 `${deco}
 🎨 | AI Image Generated
 
-🖌 Prompt: ${prompt}
+🖌 Prompt:
+${prompt}
+
 📐 Ratio: ${ratio}
 ${deco}`
         },
         pageAccessToken
       );
 
-      // 🖼️ Envoyer ensuite l’image
+      // 🖼️ Image
       await sendMessage(
         senderId,
         {
           attachment: {
             type: 'image',
-            payload: { url: imageUrl, is_reusable: true }
+            payload: {
+              url: imageUrl,
+              is_reusable: true
+            }
           }
         },
         pageAccessToken
       );
 
     } catch (error) {
-      console.error('Imagine Command Error:', error.message || error);
+      console.error('Imagine Command Error:', error.response?.data || error.message);
       await sendMessage(
         senderId,
         { text: '❌ Error while generating the image. Please try again later.' },
