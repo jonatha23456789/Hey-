@@ -27,34 +27,35 @@ module.exports = {
 
     await sendMessage(
       senderId,
-      { text: '🍌 Generating Nano-Banana image, please wait...' },
+      { text: '🍌 Generating Nano-Banana image, please wait (20-30s)...' },
       pageAccessToken
     );
 
     try {
-      const imageUrl = getReplyImage(event);
+      const replyImage = getReplyImage(event);
 
-      const apiUrl = 'https://api.nekolabs.web.id/img.gen/nano-banana';
+      // ✅ Params propres
+      const params = { prompt };
+      if (replyImage) params.imageUrl = replyImage;
 
-      const { data } = await axios.get(apiUrl, {
-        params: {
-          prompt,
-          imageUrl: imageUrl || undefined
+      const { data } = await axios.get(
+        'https://api.nekolabs.web.id/img.gen/nano-banana',
+        {
+          params,
+          timeout: 60000 // ⏱️ IMPORTANT
         }
-      });
+      );
 
       if (!data?.success || !data?.result) {
         return sendMessage(
           senderId,
-          { text: '❌ Image generation failed.' },
+          { text: '❌ Image generation failed (empty result).' },
           pageAccessToken
         );
       }
 
-      const resultImage = data.result;
       const deco = '・───── 🍌 ─────・';
 
-      // 📝 Message info
       await sendMessage(
         senderId,
         {
@@ -69,14 +70,13 @@ ${deco}`
         pageAccessToken
       );
 
-      // 🖼️ Image
       await sendMessage(
         senderId,
         {
           attachment: {
             type: 'image',
             payload: {
-              url: resultImage,
+              url: data.result,
               is_reusable: true
             }
           }
@@ -85,10 +85,10 @@ ${deco}`
       );
 
     } catch (err) {
-      console.error('NanoBanana Error:', err.response?.data || err.message);
+      console.error('NanoBanana API Error:', err.response?.data || err.message);
       await sendMessage(
         senderId,
-        { text: '❌ Error while generating image.' },
+        { text: '❌ Nano-Banana API timeout or error. Try again.' },
         pageAccessToken
       );
     }
