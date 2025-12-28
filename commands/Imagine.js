@@ -7,7 +7,7 @@ module.exports = {
   usage: '-imagine <prompt> [1:1 | 16:9 | 9:16]',
   author: 'Jonathan',
 
-  async execute(senderId, args, pageAccessToken) {
+  async execute(senderId, args, pageAccessToken, imageCache) {
     if (!args.length) {
       return sendMessage(
         senderId,
@@ -20,7 +20,7 @@ module.exports = {
     let ratio = '1:1';
     const ratioMatch = args.join(' ').match(/\b(1:1|16:9|9:16)\b$/);
     if (ratioMatch) {
-      ratio = ratioMatch[1];
+      ratio = ratioMatch[0];
       args.pop();
     }
 
@@ -35,16 +35,16 @@ module.exports = {
     try {
       const apiUrl = 'https://midjanuarybyxnil.onrender.com/imagine';
 
-      // ⚠️ IMPORTANT : on NE lit PAS data
       const response = await axios.get(apiUrl, {
         params: { prompt, ratio },
-        responseType: 'stream'
+        maxRedirects: 5,
+        timeout: 30000
       });
 
-      // ✅ URL finale de l’image générée
-      const imageUrl = response.request.res.responseUrl;
+      // ✅ URL finale de l’image (après redirection)
+      const imageUrl = response.request?.res?.responseUrl;
 
-      if (!imageUrl) {
+      if (!imageUrl || !imageUrl.startsWith('http')) {
         return sendMessage(
           senderId,
           { text: '❌ Image generation failed.' },
@@ -54,7 +54,22 @@ module.exports = {
 
       const deco = '・───── >ᴗ< ─────・';
 
-      // 📝 texte d'abord
+      // 🖼️ IMAGE D’ABORD
+      await sendMessage(
+        senderId,
+        {
+          attachment: {
+            type: 'image',
+            payload: {
+              url: imageUrl,
+              is_reusable: true
+            }
+          }
+        },
+        pageAccessToken
+      );
+
+      // 📝 TEXTE APRÈS
       await sendMessage(
         senderId,
         {
@@ -67,21 +82,6 @@ ${prompt}
 
 📐 Ratio: ${ratio}
 ${deco}`
-        },
-        pageAccessToken
-      );
-
-      // 🖼️ image ensuite
-      await sendMessage(
-        senderId,
-        {
-          attachment: {
-            type: 'image',
-            payload: {
-              url: imageUrl,
-              is_reusable: true
-            }
-          }
         },
         pageAccessToken
       );
