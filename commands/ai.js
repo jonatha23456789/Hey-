@@ -5,7 +5,7 @@ const { sendMessage } = require('../handles/sendMessage');
 const memory = new Map();
 const MAX_MEMORY = 10;
 
-// Découpe texte
+// ✂️ Découpe texte Messenger
 function splitMessage(text, maxLength = 1900) {
   const chunks = [];
   for (let i = 0; i < text.length; i += maxLength) {
@@ -14,14 +14,29 @@ function splitMessage(text, maxLength = 1900) {
   return chunks;
 }
 
-// 📸 Image depuis reply
-function getReplyImage(event) {
-  return event?.message?.reply_to?.message?.attachments?.[0]?.type === 'image'
-    ? event.message.reply_to.message.attachments[0].payload?.url
-    : null;
+// 📸 Récupérer image depuis un reply (Graph API)
+async function getReplyImage(event, pageAccessToken) {
+  const mid = event?.message?.reply_to?.mid;
+  if (!mid) return null;
+
+  try {
+    const { data } = await axios.get(
+      `https://graph.facebook.com/v19.0/${mid}/attachments`,
+      { params: { access_token: pageAccessToken } }
+    );
+
+    return (
+      data?.data?.[0]?.image_data?.url ||
+      data?.data?.[0]?.file_url ||
+      null
+    );
+  } catch (err) {
+    console.error('Reply image fetch error:', err.message);
+    return null;
+  }
 }
 
-// 🧠 Construire le contexte mémoire
+// 🧠 Construire contexte mémoire
 function buildContext(senderId, newQuestion) {
   const history = memory.get(senderId) || [];
   let context = '';
@@ -45,13 +60,13 @@ function saveMemory(senderId, question, answer) {
 
 module.exports = {
   name: 'ai',
-  description: 'AI with conversation memory (GPT-5-nano)',
+  description: 'AI with memory + image vision (GPT-5-nano)',
   usage: '-ai <question> | -ai reset',
   author: 'Jonathan',
 
   async execute(senderId, args, pageAccessToken, event) {
 
-    // 🔁 RESET MÉMOIRE
+    // 🔁 Reset mémoire
     if (args[0]?.toLowerCase() === 'reset') {
       memory.delete(senderId);
       return sendMessage(
@@ -70,23 +85,26 @@ module.exports = {
       );
     }
 
+    // ⏳ Feedback
     await sendMessage(senderId, { text: '' }, pageAccessToken);
 
     try {
-      const imageUrl = getReplyImage(event);
+      // 📸 image depuis reply (si existe)
+      const imageUrl = await getReplyImage(event, pageAccessToken);
 
       // 🧠 prompt avec mémoire
       const promptWithMemory = buildContext(senderId, question);
 
-      const apiUrl = 'https://api.nekolabs.web.id/txt.gen/gpt/5-nano';
-
-      const { data } = await axios.get(apiUrl, {
-        params: {
-          text: promptWithMemory,
-          imageUrl: imageUrl || undefined,
-          sessionId: senderId
+      const { data } = await axios.get(
+        'https://api.nekolabs.web.id/txt.gen/gpt/5-nano',
+        {
+          params: {
+            text: promptWithMemory,
+            imageUrl: imageUrl || undefined,
+            sessionId: senderId
+          }
         }
-      });
+      );
 
       if (!data?.success || !data?.result) {
         return sendMessage(
@@ -98,7 +116,7 @@ module.exports = {
 
       const aiResponse = data.result.trim();
 
-      // 💾 Sauvegarde mémoire
+      // 💾 sauvegarde mémoire
       saveMemory(senderId, question, aiResponse);
 
       const header = '💬 | Anime Focus AI\n・────────────・';
@@ -118,7 +136,7 @@ module.exports = {
       console.error('AI Error:', err.response?.data || err.message);
       await sendMessage(
         senderId,
-        { text: '❌ AI error occurred.' },
+        { text: '❌ AI error occurred. Please try again.' },
         pageAccessToken
       );
     }
