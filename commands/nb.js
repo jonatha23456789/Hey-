@@ -24,7 +24,7 @@ async function getReplyImage(event, pageAccessToken) {
 }
 
 module.exports = {
-  name: 'nanobanana',
+  name: 'nb',
   description: 'Generate Nano-Banana AI images using a replied image',
   usage: '-nb <prompt> (reply to an image)',
   author: 'Jonathan',
