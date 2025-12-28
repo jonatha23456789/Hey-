@@ -3,15 +3,15 @@ const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
   name: 'imagine',
-  description: 'Generate AI images using MidJanuary API',
+  description: 'Generate AI images using MidJanuary API (supports reply to image)',
   usage: '-imagine <prompt> [1:1 | 16:9 | 9:16]',
   author: 'Jonathan',
 
-  async execute(senderId, args, pageAccessToken, imageCache) {
-    if (!args.length) {
+  async execute(senderId, args, pageAccessToken, event, imageCache) {
+    if (!args.length && !event?.message?.reply_to) {
       return sendMessage(
         senderId,
-        { text: '⚠️ Usage:\n-imagine <prompt> [1:1 | 16:9 | 9:16]' },
+        { text: '⚠️ Usage:\n-imagine <prompt> [1:1 | 16:9 | 9:16]\nOr reply to an image with -imagine <prompt>' },
         pageAccessToken
       );
     }
@@ -26,6 +26,17 @@ module.exports = {
 
     const prompt = args.join(' ').trim();
 
+    // 🔍 Image depuis reply si disponible
+    const replyImage =
+      event?.message?.reply_to?.message?.attachments?.[0]?.type === 'image'
+        ? event.message.reply_to.message.attachments[0].payload?.url
+        : null;
+
+    // 🔍 Sinon image depuis cache
+    const cachedImg = imageCache?.get(senderId)?.url;
+
+    const imageUrl = replyImage || cachedImg || '';
+
     await sendMessage(
       senderId,
       { text: '🎨 Generating image, please wait...' },
@@ -34,17 +45,12 @@ module.exports = {
 
     try {
       const apiUrl = 'https://midjanuarybyxnil.onrender.com/imagine';
-
-      const response = await axios.get(apiUrl, {
-        params: { prompt, ratio },
-        maxRedirects: 5,
-        timeout: 30000
+      const { data } = await axios.get(apiUrl, {
+        params: { prompt, ratio, imageUrl }
       });
 
-      // ✅ URL finale de l’image (après redirection)
-      const imageUrl = response.request?.res?.responseUrl;
-
-      if (!imageUrl || !imageUrl.startsWith('http')) {
+      const generatedUrl = data?.result;
+      if (!generatedUrl) {
         return sendMessage(
           senderId,
           { text: '❌ Image generation failed.' },
@@ -54,14 +60,14 @@ module.exports = {
 
       const deco = '・───── >ᴗ< ─────・';
 
-      // 🖼️ IMAGE D’ABORD
+      // 🖼️ Envoyer image
       await sendMessage(
         senderId,
         {
           attachment: {
             type: 'image',
             payload: {
-              url: imageUrl,
+              url: generatedUrl,
               is_reusable: true
             }
           }
@@ -69,7 +75,7 @@ module.exports = {
         pageAccessToken
       );
 
-      // 📝 TEXTE APRÈS
+      // 📝 Envoyer texte décoré
       await sendMessage(
         senderId,
         {
