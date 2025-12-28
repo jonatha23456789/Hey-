@@ -9,7 +9,7 @@ function getReplyImage(event) {
 }
 
 module.exports = {
-  name: 'nb',
+  name: 'nanobanana',
   description: 'Generate anime images using Nano-Banana AI 🍌',
   usage: '-nanobanana <prompt>',
   author: 'Jonathan',
@@ -27,29 +27,32 @@ module.exports = {
 
     await sendMessage(
       senderId,
-      { text: '🍌 Generating Nano-Banana image, please wait (20-30s)...' },
+      { text: '🍌 Generating Nano-Banana image, please wait (20-40s)...' },
       pageAccessToken
     );
 
     try {
-      const replyImage = getReplyImage(event);
+      const imageUrlReply = getReplyImage(event);
 
-      // ✅ Params propres
-      const params = { prompt };
-      if (replyImage) params.imageUrl = replyImage;
-
-      const { data } = await axios.get(
+      const response = await axios.get(
         'https://api.nekolabs.web.id/img.gen/nano-banana',
         {
-          params,
-          timeout: 60000 // ⏱️ IMPORTANT
+          params: {
+            prompt,
+            imageUrl: imageUrlReply || ''
+          },
+          responseType: 'stream', // 🔥 OBLIGATOIRE
+          timeout: 90000 // ⏱️ 90 secondes
         }
       );
 
-      if (!data?.success || !data?.result) {
+      // ✅ URL FINALE APRÈS REDIRECTION
+      const imageUrl = response.request?.res?.responseUrl;
+
+      if (!imageUrl) {
         return sendMessage(
           senderId,
-          { text: '❌ Image generation failed (empty result).' },
+          { text: '❌ Image generation failed (no redirect URL).' },
           pageAccessToken
         );
       }
@@ -76,7 +79,7 @@ ${deco}`
           attachment: {
             type: 'image',
             payload: {
-              url: data.result,
+              url: imageUrl,
               is_reusable: true
             }
           }
@@ -85,10 +88,10 @@ ${deco}`
       );
 
     } catch (err) {
-      console.error('NanoBanana API Error:', err.response?.data || err.message);
+      console.error('NanoBanana Error:', err.message || err);
       await sendMessage(
         senderId,
-        { text: '❌ Nano-Banana API timeout or error. Try again.' },
+        { text: '❌ Nano-Banana generation failed. Try again.' },
         pageAccessToken
       );
     }
