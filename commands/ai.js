@@ -3,7 +3,7 @@ const { sendMessage } = require('../handles/sendMessage');
 
 // 🧠 Mémoire en RAM (par utilisateur)
 const memory = new Map();
-const MAX_MEMORY = 10; // nombre de messages gardés
+const MAX_MEMORY = 10;
 
 // Découpe texte
 function splitMessage(text, maxLength = 1900) {
@@ -24,18 +24,17 @@ function getReplyImage(event) {
 // 🧠 Construire le contexte mémoire
 function buildContext(senderId, newQuestion) {
   const history = memory.get(senderId) || [];
-
   let context = '';
-  history.forEach(m => {
+
+  for (const m of history) {
     context += `User: ${m.q}\nAI: ${m.a}\n`;
-  });
+  }
 
   context += `User: ${newQuestion}\nAI:`;
-
   return context;
 }
 
-// 🧠 Sauvegarder mémoire
+// 💾 Sauvegarder mémoire
 function saveMemory(senderId, question, answer) {
   const history = memory.get(senderId) || [];
   history.push({ q: question, a: answer });
@@ -46,7 +45,7 @@ function saveMemory(senderId, question, answer) {
 
 module.exports = {
   name: 'ai',
-  description: 'AI with conversation memory (GPT-5)',
+  description: 'AI with conversation memory (GPT-5-nano)',
   usage: '-ai <question> | -ai reset',
   author: 'Jonathan',
 
@@ -76,21 +75,20 @@ module.exports = {
     try {
       const imageUrl = getReplyImage(event);
 
-      // 🧠 Contexte mémoire
+      // 🧠 prompt avec mémoire
       const promptWithMemory = buildContext(senderId, question);
 
-      let apiUrl =
-        `https://miko-utilis.vercel.app/api/gpt5?` +
-        `query=${encodeURIComponent(promptWithMemory)}` +
-        `&userId=${senderId}`;
+      const apiUrl = 'https://api.nekolabs.web.id/txt.gen/gpt/5-nano';
 
-      if (imageUrl) {
-        apiUrl += `&imgurl=${encodeURIComponent(imageUrl)}`;
-      }
+      const { data } = await axios.get(apiUrl, {
+        params: {
+          text: promptWithMemory,
+          imageUrl: imageUrl || undefined,
+          sessionId: senderId
+        }
+      });
 
-      const { data } = await axios.get(apiUrl);
-
-      if (!data?.status || !data?.data?.response) {
+      if (!data?.success || !data?.result) {
         return sendMessage(
           senderId,
           { text: '❌ Failed to get a response from AI.' },
@@ -98,7 +96,7 @@ module.exports = {
         );
       }
 
-      const aiResponse = data.data.response.trim();
+      const aiResponse = data.result.trim();
 
       // 💾 Sauvegarde mémoire
       saveMemory(senderId, question, aiResponse);
@@ -117,7 +115,7 @@ module.exports = {
       }
 
     } catch (err) {
-      console.error('AI Error:', err.message);
+      console.error('AI Error:', err.response?.data || err.message);
       await sendMessage(
         senderId,
         { text: '❌ AI error occurred.' },
