@@ -9,9 +9,9 @@ function getReplyImage(event) {
 }
 
 module.exports = {
-  name: 'nanobanana',
+  name: 'nb',
   description: 'Generate anime images using Nano-Banana AI 🍌',
-  usage: '-nanobanana <prompt>',
+  usage: '-nb <prompt>',
   author: 'Jonathan',
 
   async execute(senderId, args, pageAccessToken, event) {
@@ -27,38 +27,37 @@ module.exports = {
 
     await sendMessage(
       senderId,
-      { text: '🍌 Generating Nano-Banana image, please wait (20-40s)...' },
+      { text: '🍌 Generating Nano-Banana image, please wait (20–30s)...' },
       pageAccessToken
     );
 
     try {
-      const imageUrlReply = getReplyImage(event);
+      const replyImage = getReplyImage(event);
 
-      const response = await axios.get(
+      const { data } = await axios.get(
         'https://api.nekolabs.web.id/img.gen/nano-banana',
         {
           params: {
             prompt,
-            imageUrl: imageUrlReply || ''
+            imageUrl: replyImage || ''
           },
-          responseType: 'stream', // 🔥 OBLIGATOIRE
-          timeout: 90000 // ⏱️ 90 secondes
+          timeout: 90000
         }
       );
 
-      // ✅ URL FINALE APRÈS REDIRECTION
-      const imageUrl = response.request?.res?.responseUrl;
-
-      if (!imageUrl) {
+      // ✅ NOUVEAU FORMAT JSON
+      if (!data?.success || !data?.result) {
         return sendMessage(
           senderId,
-          { text: '❌ Image generation failed (no redirect URL).' },
+          { text: '❌ Nano-Banana API returned empty result.' },
           pageAccessToken
         );
       }
 
+      const imageUrl = data.result;
       const deco = '・───── 🍌 ─────・';
 
+      // 📝 Texte
       await sendMessage(
         senderId,
         {
@@ -73,6 +72,7 @@ ${deco}`
         pageAccessToken
       );
 
+      // 🖼 Image
       await sendMessage(
         senderId,
         {
@@ -87,11 +87,11 @@ ${deco}`
         pageAccessToken
       );
 
-    } catch (err) {
-      console.error('NanoBanana Error:', err.message || err);
+    } catch (error) {
+      console.error('NanoBanana Error:', error.message || error);
       await sendMessage(
         senderId,
-        { text: '❌ Nano-Banana generation failed. Try again.' },
+        { text: '❌ Nano-Banana generation failed. Try again later.' },
         pageAccessToken
       );
     }
