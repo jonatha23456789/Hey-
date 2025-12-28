@@ -4,7 +4,7 @@ const { sendMessage } = require('../handles/sendMessage');
 module.exports = {
   name: 'imagine',
   description: 'Generate AI images using MidJanuary API',
-  usage: '-imagine <prompt> [ratio 1:1 | 16:9 | 9:16]',
+  usage: '-imagine <prompt> [1:1 | 16:9 | 9:16]',
   author: 'Jonathan',
 
   async execute(senderId, args, pageAccessToken) {
@@ -16,7 +16,7 @@ module.exports = {
       );
     }
 
-    // 🎯 Détection ratio
+    // 🎯 Ratio
     let ratio = '1:1';
     const ratioMatch = args.join(' ').match(/\b(1:1|16:9|9:16)\b$/);
     if (ratioMatch) {
@@ -28,38 +28,33 @@ module.exports = {
 
     await sendMessage(
       senderId,
-      { text: '🎨 Generating your AI image, please wait...' },
+      { text: '🎨 Generating image, please wait...' },
       pageAccessToken
     );
 
     try {
       const apiUrl = 'https://midjanuarybyxnil.onrender.com/imagine';
 
-      const { data } = await axios.get(apiUrl, {
-        params: {
-          prompt,
-          ratio
-        }
+      // ⚠️ IMPORTANT : on NE lit PAS data
+      const response = await axios.get(apiUrl, {
+        params: { prompt, ratio },
+        responseType: 'stream'
       });
 
-      // 🔍 récupération image URL (multi-format)
-      const imageUrl =
-        data?.image ||
-        data?.result ||
-        data?.url ||
-        data?.data?.image;
+      // ✅ URL finale de l’image générée
+      const imageUrl = response.request.res.responseUrl;
 
       if (!imageUrl) {
         return sendMessage(
           senderId,
-          { text: '❌ Failed to generate image.' },
+          { text: '❌ Image generation failed.' },
           pageAccessToken
         );
       }
 
       const deco = '・───── >ᴗ< ─────・';
 
-      // 📝 message + image
+      // 📝 texte d'abord
       await sendMessage(
         senderId,
         {
@@ -76,6 +71,7 @@ ${deco}`
         pageAccessToken
       );
 
+      // 🖼️ image ensuite
       await sendMessage(
         senderId,
         {
