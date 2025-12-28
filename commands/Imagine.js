@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
   name: 'imagine',
@@ -6,26 +7,33 @@ module.exports = {
   usage: '-imagine <prompt> [1:1 | 16:9 | 9:16]',
   author: 'Jonathan',
 
-  async execute(senderId, args, pageAccessToken, event, sendMessageFn, imageCache) {
+  async execute(senderId, args, pageAccessToken) {
     if (!args.length) {
-      return sendMessageFn(
+      return sendMessage(
         senderId,
         { text: '⚠️ Usage:\n-imagine <prompt> [1:1 | 16:9 | 9:16]' },
         pageAccessToken
       );
     }
 
-    // 🎯 Ratio
+    // 🔹 Extraire le ratio si spécifié
     let ratio = '1:1';
-    const ratioMatch = args.join(' ').match(/\b(1:1|16:9|9:16)\b$/);
-    if (ratioMatch) {
-      ratio = ratioMatch[0];
+    const lastArg = args[args.length - 1];
+    if (['1:1', '16:9', '9:16'].includes(lastArg)) {
+      ratio = lastArg;
       args.pop();
     }
 
     const prompt = args.join(' ').trim();
+    if (!prompt) {
+      return sendMessage(
+        senderId,
+        { text: '⚠️ Veuillez fournir un prompt valide.' },
+        pageAccessToken
+      );
+    }
 
-    await sendMessageFn(
+    await sendMessage(
       senderId,
       { text: '🎨 Generating image, please wait...' },
       pageAccessToken
@@ -33,41 +41,38 @@ module.exports = {
 
     try {
       const apiUrl = 'https://midjanuarybyxnil.onrender.com/imagine';
+      const { data } = await axios.get(apiUrl, { params: { prompt, ratio } });
 
-      // 🔍 Image reply ou cache
-      const replyImage = event?.message?.reply_to?.message?.attachments?.[0]?.payload?.url;
-      const cachedImg = imageCache?.get(senderId)?.url;
-      const imageUrlParam = replyImage || cachedImg || '';
-
-      // ⚠️ API call : renvoie JSON { success: true, result: <url> }
-      const { data } = await axios.get(apiUrl, {
-        params: { prompt, ratio, imageUrl: imageUrlParam }
-      });
-
-      if (!data.success || !data.result) {
-        return sendMessageFn(
+      if (!data?.success || !data?.result) {
+        return sendMessage(
           senderId,
           { text: '❌ Image generation failed (API returned empty result).' },
           pageAccessToken
         );
       }
 
-      const imageUrl = data.result; // URL finale de l’image
+      const imageUrl = data.result; // ✅ l’URL de l’image générée
       const deco = '・───── >ᴗ< ─────・';
 
-      // 📝 Envoi texte + image
-      await sendMessageFn(
+      // 📝 Envoyer d’abord le texte de confirmation
+      await sendMessage(
         senderId,
         {
           text:
 `${deco}
 🎨 | AI Image Generated
 
-🖌 Prompt:
-${prompt}
-
+🖌 Prompt: ${prompt}
 📐 Ratio: ${ratio}
-${deco}`,
+${deco}`
+        },
+        pageAccessToken
+      );
+
+      // 🖼️ Envoyer ensuite l’image
+      await sendMessage(
+        senderId,
+        {
           attachment: {
             type: 'image',
             payload: { url: imageUrl, is_reusable: true }
@@ -78,9 +83,9 @@ ${deco}`,
 
     } catch (error) {
       console.error('Imagine Command Error:', error.message || error);
-      await sendMessageFn(
+      await sendMessage(
         senderId,
-        { text: '❌ Error while generating the image.' },
+        { text: '❌ Error while generating the image. Please try again later.' },
         pageAccessToken
       );
     }
