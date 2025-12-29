@@ -1,24 +1,13 @@
 const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
 
-function getReplyText(event) {
-  const reply = event?.message?.reply_to;
-  if (!reply) return null;
-
-  if (typeof reply.text === 'string') return reply.text;
-  if (reply.message?.text) return reply.message.text;
-  if (reply.message?.message?.text) return reply.message.message.text;
-
-  return null;
-}
-
 module.exports = {
   name: 'trans',
-  description: 'Translate text (supports reply)',
+  description: 'Translate text (reply supported)',
   author: 'Kelvin',
   usage: '-trans <lang> OR reply + -trans <lang>',
 
-  async execute(senderId, args, pageAccessToken, event) {
+  async execute(senderId, args, pageAccessToken) {
 
     let text;
     let lang;
@@ -26,12 +15,12 @@ module.exports = {
     /* ===== REPLY MODE ===== */
     if (args.length === 1) {
       lang = args[0].toLowerCase();
-      text = getReplyText(event);
+      text = global.lastTextMessage?.[senderId];
 
       if (!text) {
         return sendMessage(
           senderId,
-          { text: '❌ Reply to a TEXT message before using this command.' },
+          { text: '❌ No previous text message found to translate.' },
           pageAccessToken
         );
       }
