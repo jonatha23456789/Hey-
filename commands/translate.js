@@ -1,85 +1,75 @@
 const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
 
-// 🔎 Récupérer le texte du reply (robuste)
 function getReplyText(event) {
-  const reply = event?.message?.reply_to?.message;
+  const reply = event?.message?.reply_to;
   if (!reply) return null;
 
   if (typeof reply.text === 'string') return reply.text;
   if (reply.message?.text) return reply.message.text;
+  if (reply.message?.message?.text) return reply.message.message.text;
 
   return null;
 }
 
 module.exports = {
   name: 'trans',
-  description: 'Translate text into any language (supports reply)',
+  description: 'Translate text (supports reply)',
   author: 'Kelvin',
-  usage: '-trans <lang> OR -trans <text> <lang>',
+  usage: '-trans <lang> OR reply + -trans <lang>',
 
   async execute(senderId, args, pageAccessToken, event) {
 
-    let textToTranslate;
-    let targetLang;
+    let text;
+    let lang;
 
-    /* ===============================
-       🔁 CAS REPLY → -trans fr
-       =============================== */
+    /* ===== REPLY MODE ===== */
     if (args.length === 1) {
-      targetLang = args[0].toLowerCase();
-      textToTranslate = getReplyText(event);
+      lang = args[0].toLowerCase();
+      text = getReplyText(event);
 
-      if (!textToTranslate) {
+      if (!text) {
         return sendMessage(
           senderId,
-          { text: '❌ Please reply to a text message to translate it.' },
+          { text: '❌ Reply to a TEXT message before using this command.' },
           pageAccessToken
         );
       }
     }
 
-    /* ===============================
-       📝 CAS NORMAL → -trans hello fr
-       =============================== */
+    /* ===== NORMAL MODE ===== */
     else if (args.length >= 2) {
-      targetLang = args.pop().toLowerCase();
-      textToTranslate = args.join(' ');
+      lang = args.pop().toLowerCase();
+      text = args.join(' ');
     }
 
-    /* ===============================
-       ❌ MAUVAIS USAGE
-       =============================== */
+    /* ===== WRONG USAGE ===== */
     else {
       return sendMessage(
         senderId,
         {
           text:
             '❌ Usage:\n' +
-            '• Reply + `-trans <lang>`\n' +
-            '• `-trans <text> <lang>`'
+            '• Reply + `-trans fr`\n' +
+            '• `-trans hello fr`'
         },
         pageAccessToken
       );
     }
 
-    /* ===============================
-       🌍 API TRANSLATE
-       =============================== */
+    /* ===== API TRANSLATE ===== */
     try {
       const res = await axios.get(
         'https://miko-utilis.vercel.app/api/translate',
         {
           params: {
-            text: textToTranslate,
-            to: targetLang
+            text,
+            to: lang
           }
         }
       );
 
-      if (!res.data?.success || !res.data?.translated_text?.translated) {
-        throw new Error('Translation failed');
-      }
+      if (!res.data?.success) throw new Error('API failed');
 
       const translated = res.data.translated_text.translated;
 
@@ -90,20 +80,20 @@ module.exports = {
 `🌍 Translation
 
 📝 Original:
-${textToTranslate}
+${text}
 
-🔤 To: ${targetLang}
+🔤 To: ${lang}
 ✅ Result:
 ${translated}`
         },
         pageAccessToken
       );
 
-    } catch (error) {
-      console.error('Translate error:', error.response?.data || error.message);
+    } catch (err) {
+      console.error('Translate ERROR:', err.response?.data || err.message);
       await sendMessage(
         senderId,
-        { text: '❌ Error while translating text.' },
+        { text: '❌ Translation failed.' },
         pageAccessToken
       );
     }
