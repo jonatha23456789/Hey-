@@ -1,23 +1,34 @@
 const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
 
+// 🔎 Récupérer le texte du reply (robuste)
+function getReplyText(event) {
+  const reply = event?.message?.reply_to?.message;
+  if (!reply) return null;
+
+  if (typeof reply.text === 'string') return reply.text;
+  if (reply.message?.text) return reply.message.text;
+
+  return null;
+}
+
 module.exports = {
   name: 'trans',
   description: 'Translate text into any language (supports reply)',
   author: 'Kelvin',
-  usage: '-translate <lang> OR -translate <text> <lang>',
+  usage: '-trans <lang> OR -trans <text> <lang>',
 
   async execute(senderId, args, pageAccessToken, event) {
 
-    let textToTranslate = null;
-    let targetLang = null;
+    let textToTranslate;
+    let targetLang;
 
-    // 📌 Cas reply : -translate <lang>
+    /* ===============================
+       🔁 CAS REPLY → -trans fr
+       =============================== */
     if (args.length === 1) {
       targetLang = args[0].toLowerCase();
-
-      // Récupérer le texte depuis le message reply
-      textToTranslate = event?.message?.reply_to?.message?.text;
+      textToTranslate = getReplyText(event);
 
       if (!textToTranslate) {
         return sendMessage(
@@ -28,27 +39,33 @@ module.exports = {
       }
     }
 
-    // 📌 Cas texte normal : -translate <text> <lang>
+    /* ===============================
+       📝 CAS NORMAL → -trans hello fr
+       =============================== */
     else if (args.length >= 2) {
       targetLang = args.pop().toLowerCase();
       textToTranslate = args.join(' ');
     }
 
-    // ❌ Mauvais usage
+    /* ===============================
+       ❌ MAUVAIS USAGE
+       =============================== */
     else {
       return sendMessage(
         senderId,
         {
           text:
             '❌ Usage:\n' +
-            '- Reply + `-translate <lang>`\n' +
-            '- `-translate <text> <lang>`'
+            '• Reply + `-trans <lang>`\n' +
+            '• `-trans <text> <lang>`'
         },
         pageAccessToken
       );
     }
 
-    // 🌍 Traduction via API
+    /* ===============================
+       🌍 API TRANSLATE
+       =============================== */
     try {
       const res = await axios.get(
         'https://miko-utilis.vercel.app/api/translate',
@@ -66,20 +83,24 @@ module.exports = {
 
       const translated = res.data.translated_text.translated;
 
-      const reply =
-`🌍 **Translation**
+      await sendMessage(
+        senderId,
+        {
+          text:
+`🌍 Translation
 
 📝 Original:
 ${textToTranslate}
 
 🔤 To: ${targetLang}
 ✅ Result:
-${translated}`;
-
-      await sendMessage(senderId, { text: reply }, pageAccessToken);
+${translated}`
+        },
+        pageAccessToken
+      );
 
     } catch (error) {
-      console.error('Translate error:', error.message);
+      console.error('Translate error:', error.response?.data || error.message);
       await sendMessage(
         senderId,
         { text: '❌ Error while translating text.' },
