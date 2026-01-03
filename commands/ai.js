@@ -1,7 +1,7 @@
 const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
 
-const OWNER_ID = '61554245590654'; // 🔒 TON ID
+const OWNER_ID = '8592033747492364'; // 🔒 TON ID
 
 // 🔁 État global AI
 global.aiEnabled = global.aiEnabled ?? true;
