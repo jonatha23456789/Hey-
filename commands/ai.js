@@ -126,7 +126,7 @@ module.exports = {
       );
     }
 
-    await sendMessage(senderId, { text: '🤖 Thinking...' }, pageAccessToken);
+    await sendMessage(senderId, { text: '' }, pageAccessToken);
 
     try {
       const imageUrl = await getReplyImage(event, pageAccessToken);
