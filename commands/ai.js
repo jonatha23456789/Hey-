@@ -1,20 +1,25 @@
 const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
 
-// 🧠 Mémoire en RAM (par utilisateur)
+const OWNER_ID = '61554245590654'; // 🔒 TON ID
+
+// 🔁 État global AI
+global.aiEnabled = global.aiEnabled ?? true;
+
+// 🧠 Mémoire RAM
 const memory = new Map();
 const MAX_MEMORY = 10;
 
-// ✂️ Découpe texte Messenger
-function splitMessage(text, maxLength = 1900) {
-  const chunks = [];
-  for (let i = 0; i < text.length; i += maxLength) {
-    chunks.push(text.slice(i, i + maxLength));
+// ✂️ Découpe Messenger
+function splitMessage(text, max = 1900) {
+  const arr = [];
+  for (let i = 0; i < text.length; i += max) {
+    arr.push(text.slice(i, i + max));
   }
-  return chunks;
+  return arr;
 }
 
-// 📸 Récupérer image depuis un reply (Graph API)
+// 📸 Image depuis reply
 async function getReplyImage(event, pageAccessToken) {
   const mid = event?.message?.reply_to?.mid;
   if (!mid) return null;
@@ -30,43 +35,79 @@ async function getReplyImage(event, pageAccessToken) {
       data?.data?.[0]?.file_url ||
       null
     );
-  } catch (err) {
-    console.error('Reply image fetch error:', err.message);
+  } catch {
     return null;
   }
 }
 
-// 🧠 Construire contexte mémoire
-function buildContext(senderId, newQuestion) {
-  const history = memory.get(senderId) || [];
-  let context = '';
+// 🧠 Contexte mémoire
+function buildContext(senderId, question) {
+  const hist = memory.get(senderId) || [];
+  let ctx = '';
 
-  for (const m of history) {
-    context += `User: ${m.q}\nAI: ${m.a}\n`;
+  for (const h of hist) {
+    ctx += `User: ${h.q}\nAI: ${h.a}\n`;
   }
 
-  context += `User: ${newQuestion}\nAI:`;
-  return context;
+  ctx += `User: ${question}\nAI:`;
+  return ctx;
 }
 
-// 💾 Sauvegarder mémoire
-function saveMemory(senderId, question, answer) {
-  const history = memory.get(senderId) || [];
-  history.push({ q: question, a: answer });
-
-  if (history.length > MAX_MEMORY) history.shift();
-  memory.set(senderId, history);
+// 💾 Sauvegarde mémoire
+function saveMemory(senderId, q, a) {
+  const hist = memory.get(senderId) || [];
+  hist.push({ q, a });
+  if (hist.length > MAX_MEMORY) hist.shift();
+  memory.set(senderId, hist);
 }
 
 module.exports = {
   name: 'ai',
-  description: 'AI with memory + image vision (GPT-5-nano)',
-  usage: '-ai <question> | -ai reset',
+  description: 'AI with ON/OFF + memory + image vision',
+  usage: '-ai <question> | -ai on | -ai off | -ai reset',
   author: 'Jonathan',
 
   async execute(senderId, args, pageAccessToken, event) {
 
-    // 🔁 Reset mémoire
+    /* =====================
+       🔐 AI ON / OFF
+       ===================== */
+    if (['on', 'off'].includes(args[0])) {
+      if (senderId !== OWNER_ID) {
+        return sendMessage(
+          senderId,
+          { text: '❌ You are not allowed to control AI status.' },
+          pageAccessToken
+        );
+      }
+
+      global.aiEnabled = args[0] === 'on';
+
+      return sendMessage(
+        senderId,
+        {
+          text: global.aiEnabled
+            ? '✅ AI is now ENABLED for everyone.'
+            : '🚫 AI is now DISABLED (owner only).'
+        },
+        pageAccessToken
+      );
+    }
+
+    /* =====================
+       🚫 AI OFF → OWNER ONLY
+       ===================== */
+    if (!global.aiEnabled && senderId !== OWNER_ID) {
+      return sendMessage(
+        senderId,
+        { text: '🚫 AI is currently disabled by the owner.' },
+        pageAccessToken
+      );
+    }
+
+    /* =====================
+       🔁 RESET MÉMOIRE
+       ===================== */
     if (args[0]?.toLowerCase() === 'reset') {
       memory.delete(senderId);
       return sendMessage(
@@ -80,63 +121,83 @@ module.exports = {
     if (!question) {
       return sendMessage(
         senderId,
-        { text: '⚠️ Usage:\n-ai <question>\n-ai reset' },
+        { text: '⚠️ Usage:\n-ai <question>\n-ai on/off\n-ai reset' },
         pageAccessToken
       );
     }
 
-    // ⏳ Feedback
-    await sendMessage(senderId, { text: '' }, pageAccessToken);
+    await sendMessage(senderId, { text: '🤖 Thinking...' }, pageAccessToken);
 
     try {
-      // 📸 image depuis reply (si existe)
       const imageUrl = await getReplyImage(event, pageAccessToken);
+      const prompt = buildContext(senderId, question);
 
-      // 🧠 prompt avec mémoire
-      const promptWithMemory = buildContext(senderId, question);
+      let aiResponse = null;
+      let modelUsed = 'GPT-5-nano';
 
-      const { data } = await axios.get(
-        'https://api.nekolabs.web.id/txt.gen/gpt/5-nano',
-        {
-          params: {
-            text: promptWithMemory,
-            imageUrl: imageUrl || undefined,
-            sessionId: senderId
+      /* ===== GPT ===== */
+      try {
+        const gpt = await axios.get(
+          'https://api.nekolabs.web.id/txt.gen/gpt/5-nano',
+          {
+            params: {
+              text: prompt,
+              imageUrl: imageUrl || undefined,
+              sessionId: senderId
+            },
+            timeout: 20000
           }
-        }
-      );
-
-      if (!data?.success || !data?.result) {
-        return sendMessage(
-          senderId,
-          { text: '❌ Failed to get a response from AI.' },
-          pageAccessToken
         );
+
+        if (gpt.data?.success && gpt.data?.result) {
+          aiResponse = gpt.data.result.trim();
+        }
+      } catch {}
+
+      /* ===== FALLBACK GEMINI ===== */
+      if (!aiResponse) {
+        modelUsed = 'Gemini 2.5 Pro';
+
+        const gemini = await axios.get(
+          'https://api.nekolabs.web.id/text.gen/gemini/2.5-pro',
+          {
+            params: {
+              text: prompt,
+              systemPrompt: 'You are a helpful assistant',
+              imageUrl: imageUrl || undefined,
+              sessionId: senderId
+            },
+            timeout: 30000
+          }
+        );
+
+        if (!gemini.data?.success || !gemini.data?.result) {
+          throw new Error('All AI models failed');
+        }
+
+        aiResponse = gemini.data.result.trim();
       }
 
-      const aiResponse = data.result.trim();
-
-      // 💾 sauvegarde mémoire
       saveMemory(senderId, question, aiResponse);
 
-      const header = '💬 | Anime Focus AI\n・────────────・';
+      const header =
+`💬 | Anime Focus AI
+🧠 Model: ${modelUsed}
+・────────────・`;
+
       const footer = '\n・──── >ᴗ< ─────・';
 
-      const chunks = splitMessage(aiResponse);
-
-      for (let i = 0; i < chunks.length; i++) {
-        let msg = chunks[i];
-        if (i === 0) msg = header + '\n' + msg;
-        if (i === chunks.length - 1) msg += footer;
-
-        await sendMessage(senderId, { text: msg }, pageAccessToken);
+      for (const chunk of splitMessage(aiResponse)) {
+        await sendMessage(senderId, {
+          text: header + '\n' + chunk + footer
+        }, pageAccessToken);
       }
 
     } catch (err) {
-      console.error('AI Error:', err.response?.data || err.message);
+      console.error('AI ERROR:', err.message);
       await sendMessage(
         senderId,
-        { text: '❌ AI error occurred. Please try again.' },
+        { text: '❌ AI failed. Please try again later.' },
         pageAccessToken
       );
     }
