@@ -11,13 +11,13 @@ global.aiModel = global.aiModel ?? 'copilot';
 const memory = new Map();
 const MAX_MEMORY = 10;
 
-// ✂️ Split Messenger
-function splitMessage(text, max = 1900) {
-  const out = [];
+// ✂️ Découpe + pagination
+function paginate(text, max = 1800) {
+  const pages = [];
   for (let i = 0; i < text.length; i += max) {
-    out.push(text.slice(i, i + max));
+    pages.push(text.slice(i, i + max));
   }
-  return out;
+  return pages;
 }
 
 // 📸 Image depuis reply
@@ -68,80 +68,68 @@ module.exports = {
 
   async execute(senderId, args, pageAccessToken, event) {
 
-    /* =====================
-       🔐 AI ON / OFF
-       ===================== */
+    /* 🔐 AI ON / OFF */
     if (['on', 'off'].includes(args[0])) {
       if (senderId !== OWNER_ID) {
-        return sendMessage(senderId,
-          { text: '❌ Owner only.' },
-          pageAccessToken
-        );
+        return sendMessage(senderId, { text: '❌ Owner only.' }, pageAccessToken);
       }
 
       global.aiEnabled = args[0] === 'on';
-      return sendMessage(senderId,
+      return sendMessage(
+        senderId,
         { text: global.aiEnabled ? '✅ AI ENABLED' : '🚫 AI DISABLED' },
         pageAccessToken
       );
     }
 
-    /* =====================
-       🔀 SWITCH MODEL
-       ===================== */
+    /* 🔀 SWITCH MODEL */
     if (args[0] === 'switch') {
       if (senderId !== OWNER_ID) {
-        return sendMessage(senderId,
-          { text: '❌ Owner only.' },
-          pageAccessToken
-        );
+        return sendMessage(senderId, { text: '❌ Owner only.' }, pageAccessToken);
       }
 
       const model = args[1]?.toLowerCase();
       if (!['copilot', 'gemini'].includes(model)) {
-        return sendMessage(senderId,
+        return sendMessage(
+          senderId,
           { text: '⚠️ Usage: ai switch copilot | gemini' },
           pageAccessToken
         );
       }
 
       global.aiModel = model;
-      return sendMessage(senderId,
-        { text: `🔄 AI model switched to **${model.toUpperCase()}**` },
+      return sendMessage(
+        senderId,
+        { text: `🔄 AI model switched to ${model.toUpperCase()}` },
         pageAccessToken
       );
     }
 
-    /* =====================
-       🚫 AI OFF
-       ===================== */
+    /* 🚫 AI OFF */
     if (!global.aiEnabled && senderId !== OWNER_ID) {
-      return sendMessage(senderId,
+      return sendMessage(
+        senderId,
         { text: '🚫 AI disabled by owner.' },
         pageAccessToken
       );
     }
 
-    /* =====================
-       🔁 RESET
-       ===================== */
+    /* 🔁 RESET */
     if (args[0] === 'reset') {
       memory.delete(senderId);
-      return sendMessage(senderId,
-        { text: '🧠 Memory cleared.' },
-        pageAccessToken
-      );
+      return sendMessage(senderId, { text: '🧠 Memory cleared.' }, pageAccessToken);
     }
 
     const question = args.join(' ').trim();
     if (!question) {
-      return sendMessage(senderId,
+      return sendMessage(
+        senderId,
         { text: '⚠️ Usage: ai <question>' },
         pageAccessToken
       );
     }
 
-    await sendMessage(senderId, { text: '🤖 Thinking...' }, pageAccessToken);
+    await sendMessage(senderId, { text: '' }, pageAccessToken);
 
     try {
       const imageUrl = await getReplyImage(event, pageAccessToken);
@@ -171,7 +159,7 @@ module.exports = {
         } catch {}
       }
 
-      /* ===== GEMINI (fallback ou switch) ===== */
+      /* ===== GEMINI ===== */
       if (!response) {
         usedModel = 'gemini';
 
@@ -202,17 +190,32 @@ module.exports = {
 🧠 Model: ${usedModel.toUpperCase()}
 ・────────────・`;
 
-      const footer = '\n・──── >ᴗ< ─────・';
+      const footer = '・──── >ᴗ< ─────・';
 
-      for (const chunk of splitMessage(response)) {
-        await sendMessage(senderId, {
-          text: header + '\n' + chunk + footer
-        }, pageAccessToken);
+      // ✂️ PAGINATION FINALE
+      const pages = paginate(response);
+
+      for (let i = 0; i < pages.length; i++) {
+        let msg = '';
+
+        if (i === 0) msg += `${header}\n`;
+        msg += pages[i];
+
+        if (pages.length > 1) {
+          msg += `\n\n📄 (${i + 1}/${pages.length})`;
+        }
+
+        if (i === pages.length - 1) {
+          msg += `\n${footer}`;
+        }
+
+        await sendMessage(senderId, { text: msg }, pageAccessToken);
       }
 
     } catch (err) {
       console.error('AI ERROR:', err.message);
-      await sendMessage(senderId,
+      await sendMessage(
+        senderId,
         { text: '❌ AI failed. Try later.' },
         pageAccessToken
       );
