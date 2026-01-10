@@ -19,7 +19,7 @@ module.exports = {
 
       let imageUrl = null;
 
-      // ✅ Si c’est un reply sans pièce jointe directe, on va chercher l’image d’origine
+      // 📸 Récupération image depuis reply
       if (
         repliedMessage.message &&
         repliedMessage.message.reply_to &&
@@ -31,17 +31,15 @@ module.exports = {
         const { data: messageData } = await axios.get(graphUrl);
 
         if (
-          messageData &&
-          messageData.attachments &&
-          messageData.attachments.data &&
-          messageData.attachments.data.length > 0
+          messageData?.attachments?.data?.length
         ) {
           const attachment = messageData.attachments.data.find(
-            (att) => att.mime_type && att.mime_type.startsWith('image/')
+            att => att.mime_type && att.mime_type.startsWith('image/')
           );
-          if (attachment && attachment.image_data && attachment.image_data.url) {
+
+          if (attachment?.image_data?.url) {
             imageUrl = attachment.image_data.url;
-          } else if (attachment && attachment.payload && attachment.payload.url) {
+          } else if (attachment?.payload?.url) {
             imageUrl = attachment.payload.url;
           }
         }
@@ -50,16 +48,28 @@ module.exports = {
       if (!imageUrl) {
         return sendMessage(
           senderId,
-          { text: '⚠️ Please reply to an image to generate a prompt.' },
+          { text: '⚠️ Please reply to an IMAGE to generate a prompt.' },
           pageAccessToken
         );
       }
 
-      // 🔥 Appel API externe
-      const apiUrl = `https://nova-apis.onrender.com/prompt?image=${encodeURIComponent(imageUrl)}`;
-      const { data } = await axios.get(apiUrl);
+      // 🔥 NOUVELLE API img → prompt
+      const { data } = await axios.get(
+        'https://estapis.onrender.com/api/ai/img2prompt/v8',
+        {
+          params: { image: imageUrl },
+          timeout: 30000
+        }
+      );
 
-      if (!data || !data.prompt) {
+      // ✅ Sécurité parsing
+      const prompt =
+        data?.prompt ||
+        data?.result ||
+        data?.data?.prompt ||
+        data?.data?.text;
+
+      if (!prompt) {
         return sendMessage(
           senderId,
           { text: '❌ Failed to generate prompt from this image.' },
@@ -69,9 +79,16 @@ module.exports = {
 
       await sendMessage(
         senderId,
-        { text: `🖼️ *Prompt Generated Successfully!*\n\n${data.prompt}` },
+        {
+          text:
+`🖼️ | Image → Prompt
+・────────────・
+${prompt}
+・──── >ᴗ< ─────・`
+        },
         pageAccessToken
       );
+
     } catch (error) {
       console.error('Prompt Command Error:', error.response?.data || error.message);
       await sendMessage(
