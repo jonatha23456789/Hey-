@@ -3,21 +3,15 @@ const { sendMessage } = require('../handles/sendMessage');
 
 const OWNER_ID = '8592033747492364';
 
-/* =====================
-   🔁 GLOBAL STATES
-===================== */
+// 🌍 États globaux
 global.aiEnabled = global.aiEnabled ?? true;
 global.aiModel = global.aiModel ?? 'copilot';
 
-/* =====================
-   🧠 MEMORY (RAM)
-===================== */
+// 🧠 Mémoire RAM
 const memory = new Map();
 const MAX_MEMORY = 10;
 
-/* =====================
-   ✂️ PAGINATION
-===================== */
+// ✂️ Pagination Messenger
 function paginate(text, max = 1800) {
   const pages = [];
   for (let i = 0; i < text.length; i += max) {
@@ -26,32 +20,7 @@ function paginate(text, max = 1800) {
   return pages;
 }
 
-/* =====================
-   📸 IMAGE FROM REPLY
-===================== */
-async function getReplyImage(event, pageAccessToken) {
-  const mid = event?.message?.reply_to?.mid;
-  if (!mid) return null;
-
-  try {
-    const { data } = await axios.get(
-      `https://graph.facebook.com/v19.0/${mid}/attachments`,
-      { params: { access_token: pageAccessToken } }
-    );
-
-    return (
-      data?.data?.[0]?.image_data?.url ||
-      data?.data?.[0]?.file_url ||
-      null
-    );
-  } catch {
-    return null;
-  }
-}
-
-/* =====================
-   🧠 CONTEXT
-===================== */
+// 🧠 Contexte
 function buildContext(senderId, question) {
   const hist = memory.get(senderId) || [];
   let ctx = '';
@@ -64,6 +33,7 @@ function buildContext(senderId, question) {
   return ctx;
 }
 
+// 💾 Sauvegarde mémoire
 function saveMemory(senderId, q, a) {
   const hist = memory.get(senderId) || [];
   hist.push({ q, a });
@@ -71,16 +41,15 @@ function saveMemory(senderId, q, a) {
   memory.set(senderId, hist);
 }
 
-/* =====================
-   🚀 COMMAND
-===================== */
 module.exports = {
   name: 'ai',
   author: 'Jonathan',
 
-  async execute(senderId, args, pageAccessToken, event) {
+  async execute(senderId, args, pageAccessToken) {
 
-    /* ===== AI ON / OFF ===== */
+    /* =====================
+       🔐 AI ON / OFF
+       ===================== */
     if (['on', 'off'].includes(args[0])) {
       if (senderId !== OWNER_ID) {
         return sendMessage(senderId, { text: '' }, pageAccessToken);
@@ -94,7 +63,9 @@ module.exports = {
       );
     }
 
-    /* ===== SWITCH MODEL ===== */
+    /* =====================
+       🔀 SWITCH MODEL
+       ===================== */
     if (args[0] === 'switch') {
       if (senderId !== OWNER_ID) {
         return sendMessage(senderId, { text: '' }, pageAccessToken);
@@ -117,65 +88,73 @@ module.exports = {
       );
     }
 
-    /* ===== AI DISABLED ===== */
+    /* =====================
+       🚫 AI OFF
+       ===================== */
     if (!global.aiEnabled && senderId !== OWNER_ID) {
-      return sendMessage(senderId, { text: '🚫 AI disabled.' }, pageAccessToken);
+      return sendMessage(
+        senderId,
+        { text: '🚫 AI disabled by owner.' },
+        pageAccessToken
+      );
     }
 
-    /* ===== RESET MEMORY ===== */
+    /* =====================
+       🔁 RESET
+       ===================== */
     if (args[0] === 'reset') {
       memory.delete(senderId);
-      return sendMessage(senderId, { text: '🧠 Memory cleared.' }, pageAccessToken);
+      return sendMessage(
+        senderId,
+        { text: '🧠 Memory cleared.' },
+        pageAccessToken
+      );
     }
 
     const question = args.join(' ').trim();
     if (!question) {
-      return sendMessage(senderId, { text: '⚠️ Usage: ai <question>' }, pageAccessToken);
+      return sendMessage(
+        senderId,
+        { text: '⚠️ Usage: ai <question>' },
+        pageAccessToken
+      );
     }
 
     await sendMessage(senderId, { text: '' }, pageAccessToken);
 
     try {
-      const imageUrl = await getReplyImage(event, pageAccessToken);
       const prompt = buildContext(senderId, question);
-
-      let response = null;
+      let response;
       let usedModel = global.aiModel;
 
-      /* ===== COPILOT (POST FIX) ===== */
+      /* =====================
+         🧠 COPILOT (NEKOLABS)
+         ===================== */
       if (global.aiModel === 'copilot') {
-        try {
-          const { data } = await axios.post(
-            'https://api-library-kohi.onrender.com/api/copilot',
-            {
-              prompt: prompt,
-              user: senderId
-            },
-            { timeout: 30000 }
-          );
-
-          if (typeof data === 'string') {
-            response = data.trim();
-          } else if (data?.data?.text) {
-            response = data.data.text.trim();
+        const { data } = await axios.get(
+          'https://api.nekolabs.web.id/text.gen/copilot',
+          {
+            params: { text: prompt },
+            timeout: 30000
           }
+        );
 
-        } catch {
-          response = null;
+        if (!data?.success || !data?.result?.text) {
+          throw new Error('Copilot failed');
         }
+
+        response = data.result.text.trim();
       }
 
-      /* ===== GEMINI FALLBACK ===== */
-      if (!response) {
-        usedModel = 'gemini';
-
+      /* =====================
+         🌟 GEMINI (NEKOLABS)
+         ===================== */
+      if (global.aiModel === 'gemini') {
         const { data } = await axios.get(
           'https://api.nekolabs.web.id/text.gen/gemini/2.5-pro',
           {
             params: {
               text: prompt,
-              systemPrompt: 'You are a helpful assistant',
-              imageUrl: imageUrl || undefined,
               sessionId: senderId
             },
             timeout: 30000
@@ -183,7 +162,7 @@ module.exports = {
         );
 
         if (!data?.success || !data?.result) {
-          throw new Error('All models failed');
+          throw new Error('Gemini failed');
         }
 
         response = data.result.trim();
@@ -201,7 +180,11 @@ module.exports = {
       const pages = paginate(response);
 
       for (let i = 0; i < pages.length; i++) {
-        let msg = `${header}\n${pages[i]}\n${footer}`;
+        let msg =
+`${header}
+${pages[i]}
+
+${footer}`;
 
         if (pages.length > 1) {
           msg += `\n📄 (${i + 1}/${pages.length})`;
@@ -212,7 +195,11 @@ module.exports = {
 
     } catch (err) {
       console.error('AI ERROR:', err.message);
-      await sendMessage(senderId, { text: '❌ AI failed. Try later.' }, pageAccessToken);
+      await sendMessage(
+        senderId,
+        { text: '❌ AI failed. Try again later.' },
+        pageAccessToken
+      );
     }
   }
 };
