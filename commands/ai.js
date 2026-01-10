@@ -83,7 +83,7 @@ module.exports = {
     /* ===== AI ON / OFF ===== */
     if (['on', 'off'].includes(args[0])) {
       if (senderId !== OWNER_ID) {
-        return sendMessage(senderId, { text: '❌ Owner only.' }, pageAccessToken);
+        return sendMessage(senderId, { text: '' }, pageAccessToken);
       }
 
       global.aiEnabled = args[0] === 'on';
@@ -97,7 +97,7 @@ module.exports = {
     /* ===== SWITCH MODEL ===== */
     if (args[0] === 'switch') {
       if (senderId !== OWNER_ID) {
-        return sendMessage(senderId, { text: '❌ Owner only.' }, pageAccessToken);
+        return sendMessage(senderId, { text: '' }, pageAccessToken);
       }
 
       const model = args[1]?.toLowerCase();
@@ -133,7 +133,7 @@ module.exports = {
       return sendMessage(senderId, { text: '⚠️ Usage: ai <question>' }, pageAccessToken);
     }
 
-    await sendMessage(senderId, { text: '🤖 Thinking...' }, pageAccessToken);
+    await sendMessage(senderId, { text: '' }, pageAccessToken);
 
     try {
       const imageUrl = await getReplyImage(event, pageAccessToken);
