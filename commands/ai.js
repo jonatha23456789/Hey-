@@ -3,15 +3,21 @@ const { sendMessage } = require('../handles/sendMessage');
 
 const OWNER_ID = '8592033747492364';
 
-// 🔁 États globaux
+/* =====================
+   🔁 GLOBAL STATES
+===================== */
 global.aiEnabled = global.aiEnabled ?? true;
 global.aiModel = global.aiModel ?? 'copilot';
 
-// 🧠 Mémoire RAM
+/* =====================
+   🧠 MEMORY (RAM)
+===================== */
 const memory = new Map();
 const MAX_MEMORY = 10;
 
-// ✂️ Découpe + pagination
+/* =====================
+   ✂️ PAGINATION
+===================== */
 function paginate(text, max = 1800) {
   const pages = [];
   for (let i = 0; i < text.length; i += max) {
@@ -20,7 +26,9 @@ function paginate(text, max = 1800) {
   return pages;
 }
 
-// 📸 Image depuis reply
+/* =====================
+   📸 IMAGE FROM REPLY
+===================== */
 async function getReplyImage(event, pageAccessToken) {
   const mid = event?.message?.reply_to?.mid;
   if (!mid) return null;
@@ -41,7 +49,9 @@ async function getReplyImage(event, pageAccessToken) {
   }
 }
 
-// 🧠 Contexte mémoire
+/* =====================
+   🧠 CONTEXT
+===================== */
 function buildContext(senderId, question) {
   const hist = memory.get(senderId) || [];
   let ctx = '';
@@ -54,7 +64,6 @@ function buildContext(senderId, question) {
   return ctx;
 }
 
-// 💾 Sauvegarde mémoire
 function saveMemory(senderId, q, a) {
   const hist = memory.get(senderId) || [];
   hist.push({ q, a });
@@ -62,13 +71,16 @@ function saveMemory(senderId, q, a) {
   memory.set(senderId, hist);
 }
 
+/* =====================
+   🚀 COMMAND
+===================== */
 module.exports = {
   name: 'ai',
   author: 'Jonathan',
 
   async execute(senderId, args, pageAccessToken, event) {
 
-    /* 🔐 AI ON / OFF */
+    /* ===== AI ON / OFF ===== */
     if (['on', 'off'].includes(args[0])) {
       if (senderId !== OWNER_ID) {
         return sendMessage(senderId, { text: '❌ Owner only.' }, pageAccessToken);
@@ -82,7 +94,7 @@ module.exports = {
       );
     }
 
-    /* 🔀 SWITCH MODEL */
+    /* ===== SWITCH MODEL ===== */
     if (args[0] === 'switch') {
       if (senderId !== OWNER_ID) {
         return sendMessage(senderId, { text: '❌ Owner only.' }, pageAccessToken);
@@ -100,21 +112,17 @@ module.exports = {
       global.aiModel = model;
       return sendMessage(
         senderId,
-        { text: `🔄 AI model switched to ${model.toUpperCase()}` },
+        { text: `🔄 AI switched to ${model.toUpperCase()}` },
         pageAccessToken
       );
     }
 
-    /* 🚫 AI OFF */
+    /* ===== AI DISABLED ===== */
     if (!global.aiEnabled && senderId !== OWNER_ID) {
-      return sendMessage(
-        senderId,
-        { text: '🚫 AI disabled by owner.' },
-        pageAccessToken
-      );
+      return sendMessage(senderId, { text: '🚫 AI disabled.' }, pageAccessToken);
     }
 
-    /* 🔁 RESET */
+    /* ===== RESET MEMORY ===== */
     if (args[0] === 'reset') {
       memory.delete(senderId);
       return sendMessage(senderId, { text: '🧠 Memory cleared.' }, pageAccessToken);
@@ -122,14 +130,10 @@ module.exports = {
 
     const question = args.join(' ').trim();
     if (!question) {
-      return sendMessage(
-        senderId,
-        { text: '⚠️ Usage: ai <question>' },
-        pageAccessToken
-      );
+      return sendMessage(senderId, { text: '⚠️ Usage: ai <question>' }, pageAccessToken);
     }
 
-    await sendMessage(senderId, { text: '' }, pageAccessToken);
+    await sendMessage(senderId, { text: '🤖 Thinking...' }, pageAccessToken);
 
     try {
       const imageUrl = await getReplyImage(event, pageAccessToken);
@@ -138,28 +142,30 @@ module.exports = {
       let response = null;
       let usedModel = global.aiModel;
 
-      /* ===== COPILOT ===== */
+      /* ===== COPILOT (POST FIX) ===== */
       if (global.aiModel === 'copilot') {
         try {
-          const { data } = await axios.get(
+          const { data } = await axios.post(
             'https://api-library-kohi.onrender.com/api/copilot',
             {
-              params: {
-                prompt,
-                model: 'default',
-                user: senderId
-              },
-              timeout: 25000
-            }
+              prompt: prompt,
+              user: senderId
+            },
+            { timeout: 30000 }
           );
 
-          if (data?.status && data?.data?.text) {
+          if (typeof data === 'string') {
+            response = data.trim();
+          } else if (data?.data?.text) {
             response = data.data.text.trim();
           }
-        } catch {}
+
+        } catch {
+          response = null;
+        }
       }
 
-      /* ===== GEMINI ===== */
+      /* ===== GEMINI FALLBACK ===== */
       if (!response) {
         usedModel = 'gemini';
 
@@ -192,21 +198,13 @@ module.exports = {
 
       const footer = '・──── >ᴗ< ─────・';
 
-      // ✂️ PAGINATION FINALE
       const pages = paginate(response);
 
       for (let i = 0; i < pages.length; i++) {
-        let msg = '';
-
-        if (i === 0) msg += `${header}\n`;
-        msg += pages[i];
+        let msg = `${header}\n${pages[i]}\n${footer}`;
 
         if (pages.length > 1) {
-          msg += `\n\n📄 (${i + 1}/${pages.length})`;
-        }
-
-        if (i === pages.length - 1) {
-          msg += `\n${footer}`;
+          msg += `\n📄 (${i + 1}/${pages.length})`;
         }
 
         await sendMessage(senderId, { text: msg }, pageAccessToken);
@@ -214,11 +212,7 @@ module.exports = {
 
     } catch (err) {
       console.error('AI ERROR:', err.message);
-      await sendMessage(
-        senderId,
-        { text: '❌ AI failed. Try later.' },
-        pageAccessToken
-      );
+      await sendMessage(senderId, { text: '❌ AI failed. Try later.' }, pageAccessToken);
     }
   }
 };
