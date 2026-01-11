@@ -3,14 +3,14 @@ const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
   name: 'prompt',
-  description: 'Generate a detailed AI prompt from image by reply',
+  description: 'Generate a detailed AI prompt from image (reply)',
   usage: '-prompt (reply to an image)',
   author: 'kelvin',
 
   async execute(senderId, args, pageAccessToken, event) {
     try {
       /* =====================
-         📸 Récupérer image du reply
+         📸 Vérifier reply image
          ===================== */
       const mid = event?.message?.reply_to?.mid;
       if (!mid) {
@@ -21,6 +21,9 @@ module.exports = {
         );
       }
 
+      /* =====================
+         📥 Récupérer image URL
+         ===================== */
       let imageUrl = null;
 
       const { data } = await axios.get(
@@ -38,58 +41,47 @@ module.exports = {
       if (!imageUrl) {
         return sendMessage(
           senderId,
-          { text: '❌ Failed to read image from reply.' },
+          { text: '❌ Could not extract image from the replied message.' },
           pageAccessToken
         );
       }
 
       /* =====================
-         🧠 PROMPT TEXTE (pour nova)
+         🧠 IMAGE → PROMPT (TON API)
          ===================== */
-      const promptText =
-`Generate a detailed AI image generation prompt based on this image.
-
-Image URL:
-${imageUrl}
-
-The prompt must include:
-- subject
-- style (anime / realistic / cinematic if applicable)
-- colors
-- lighting
-- camera angle
-- mood
-- background
-- level of detail
-
-Return ONLY the final prompt text.`;
-
-      /* =====================
-         🔥 APPEL NOVA (TEXT ONLY)
-         ===================== */
-      const { data: result } = await axios.get(
-        `https://nova-apis.onrender.com/prompt?prompt=${encodeURIComponent(promptText)}`,
-        { timeout: 25000 }
+      const { data: apiRes } = await axios.get(
+        'https://arychauhann.onrender.com/api/imagepromptguru',
+        {
+          params: {
+            imageUrl,
+            model: 'gemini-2.5-pro',
+            lang: 'en'
+          },
+          timeout: 30000
+        }
       );
 
-      if (!result?.prompt) {
+      if (!apiRes?.success || !apiRes?.prompt) {
         return sendMessage(
           senderId,
-          { text: '❌ Failed to generate prompt.' },
+          { text: '❌ Failed to generate prompt from image.' },
           pageAccessToken
         );
       }
 
-      const reply =
+      /* =====================
+         📤 Envoi résultat
+         ===================== */
+      const message =
 `🖼️ | Image → AI Prompt
 ・────────────・
-${result.prompt}
+${apiRes.prompt}
 ・────────────・`;
 
-      await sendMessage(senderId, { text: reply }, pageAccessToken);
+      await sendMessage(senderId, { text: message }, pageAccessToken);
 
-    } catch (err) {
-      console.error('Prompt Error:', err.response?.data || err.message);
+    } catch (error) {
+      console.error('Prompt Command Error:', error.response?.data || error.message);
       await sendMessage(
         senderId,
         { text: '❌ Error while generating prompt.' },
