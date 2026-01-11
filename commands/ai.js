@@ -3,45 +3,61 @@ const { sendMessage } = require('../handles/sendMessage');
 
 const OWNER_ID = '8592033747492364';
 
-// 🌍 Global state
+// ===== GLOBAL STATES =====
 global.aiEnabled = global.aiEnabled ?? true;
 global.aiModel = global.aiModel ?? 'copilot';
 
-// 🧠 Memory
+// ===== MEMORY =====
 const memory = new Map();
 const MAX_MEMORY = 10;
 
-// ✂️ Découpe + pagination
-function paginate(text, max = 1800) {
+// ===== PAGINATION (HEADER ONLY PAGE 1) =====
+function paginate(text, model, max = 1800) {
   const pages = [];
-  for (let i = 0; i < text.length; i += max) {
-    pages.push(text.slice(i, i + max));
+  let buffer = '';
+
+  for (const line of text.split('\n')) {
+    if ((buffer + line).length > max) {
+      pages.push(buffer);
+      buffer = '';
+    }
+    buffer += line + '\n';
   }
-  return pages;
+
+  if (buffer) pages.push(buffer);
+
+  return pages.map((page, i) => {
+    if (i === 0) {
+      return (
+`💬 | Anime Focus AI
+🧠 Model: ${model.toUpperCase()}
+・────────────・
+
+${page}`
+      );
+    }
+    return page;
+  });
 }
 
-// 📸 Image depuis reply
-async function getReplyImage(event, pageAccessToken) {
+// ===== IMAGE FROM REPLY =====
+async function getReplyImage(event, token) {
   const mid = event?.message?.reply_to?.mid;
   if (!mid) return null;
 
   try {
     const { data } = await axios.get(
       `https://graph.facebook.com/v19.0/${mid}/attachments`,
-      { params: { access_token: pageAccessToken } }
+      { params: { access_token: token } }
     );
 
-    return (
-      data?.data?.[0]?.image_data?.url ||
-      data?.data?.[0]?.file_url ||
-      null
-    );
+    return data?.data?.[0]?.image_data?.url || null;
   } catch {
     return null;
   }
 }
 
-// 🧠 Build context
+// ===== CONTEXT =====
 function buildContext(senderId, question) {
   const hist = memory.get(senderId) || [];
   let ctx = '';
@@ -50,11 +66,10 @@ function buildContext(senderId, question) {
     ctx += `User: ${h.q}\nAI: ${h.a}\n`;
   }
 
-  ctx += `User: ${question}\nAI:`;
-  return ctx;
+  return ctx + `User: ${question}\nAI:`;
 }
 
-// 💾 Save memory
+// ===== SAVE MEMORY =====
 function saveMemory(senderId, q, a) {
   const hist = memory.get(senderId) || [];
   hist.push({ q, a });
@@ -68,10 +83,10 @@ module.exports = {
 
   async execute(senderId, args, pageAccessToken, event) {
 
-    /* 🔐 ON / OFF */
+    /* ===== AI ON / OFF ===== */
     if (['on', 'off'].includes(args[0])) {
       if (senderId !== OWNER_ID) {
-        return sendMessage(senderId, { text: '❌ Owner only.' }, pageAccessToken);
+        return sendMessage(senderId, { text: '' }, pageAccessToken);
       }
 
       global.aiEnabled = args[0] === 'on';
@@ -82,10 +97,10 @@ module.exports = {
       );
     }
 
-    /* 🔀 SWITCH MODEL */
+    /* ===== SWITCH MODEL ===== */
     if (args[0] === 'switch') {
       if (senderId !== OWNER_ID) {
-        return sendMessage(senderId, { text: '❌ Owner only.' }, pageAccessToken);
+        return sendMessage(senderId, { text: '' }, pageAccessToken);
       }
 
       const model = args[1]?.toLowerCase();
@@ -100,12 +115,12 @@ module.exports = {
       global.aiModel = model;
       return sendMessage(
         senderId,
-        { text: `🔄 AI model switched to ${model.toUpperCase()}` },
+        { text: `🔄 AI switched to ${model.toUpperCase()}` },
         pageAccessToken
       );
     }
 
-    /* 🚫 AI OFF */
+    /* ===== AI DISABLED ===== */
     if (!global.aiEnabled && senderId !== OWNER_ID) {
       return sendMessage(
         senderId,
@@ -114,26 +129,18 @@ module.exports = {
       );
     }
 
-    /* 🔁 RESET */
+    /* ===== RESET ===== */
     if (args[0] === 'reset') {
       memory.delete(senderId);
-      return sendMessage(
-        senderId,
-        { text: '🧠 Memory cleared.' },
-        pageAccessToken
-      );
+      return sendMessage(senderId, { text: '🧠 Memory cleared.' }, pageAccessToken);
     }
 
     const question = args.join(' ').trim();
     if (!question) {
-      return sendMessage(
-        senderId,
-        { text: '⚠️ Usage: ai <question>' },
-        pageAccessToken
-      );
+      return sendMessage(senderId, { text: '⚠️ Usage: ai <question>' }, pageAccessToken);
     }
 
-    await sendMessage(senderId, { text: '🤖 Thinking...' }, pageAccessToken);
+    await sendMessage(senderId, { text: '' }, pageAccessToken);
 
     try {
       const imageUrl = await getReplyImage(event, pageAccessToken);
@@ -142,15 +149,12 @@ module.exports = {
       let response;
       let usedModel = global.aiModel;
 
-      /* ===== COPILOT ===== */
+      /* ===== COPILOT (NEKOLABS) ===== */
       if (global.aiModel === 'copilot') {
         try {
           const { data } = await axios.get(
             'https://api.nekolabs.web.id/text.gen/copilot',
-            {
-              params: { text: prompt },
-              timeout: 25000
-            }
+            { params: { text: prompt } }
           );
 
           if (data?.success && data?.result?.text) {
@@ -170,8 +174,7 @@ module.exports = {
               text: prompt,
               imageUrl: imageUrl || undefined,
               sessionId: senderId
-            },
-            timeout: 30000
+            }
           }
         );
 
@@ -184,26 +187,16 @@ module.exports = {
 
       saveMemory(senderId, question, response);
 
-      // ✂️ PAGINATION FORMAT EXACT
-      const pages = paginate(response);
-
-      const header =
-`💬 | Anime Focus AI
-🧠 Model: ${usedModel.toUpperCase()}
-・────────────・`;
-
-      const footer = '・──── >ᴗ< ─────・';
+      const pages = paginate(response, usedModel);
 
       for (let i = 0; i < pages.length; i++) {
-        let msg =
-`${header}
+        let msg = pages[i];
 
-📄 (${i + 1}/${pages.length})
-${pages[i]}`;
-
-        if (i === pages.length - 1) {
-          msg += `\n${footer}`;
+        if (pages.length > 1) {
+          msg += `\n📄 (${i + 1}/${pages.length})`;
         }
+
+        msg += '\n・──── >ᴗ< ─────・';
 
         await sendMessage(senderId, { text: msg }, pageAccessToken);
       }
