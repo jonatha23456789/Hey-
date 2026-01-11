@@ -7,20 +7,20 @@ module.exports = {
   author: 'Kelvin',
   usage: '-trans <lang> OR reply + -trans <lang>',
 
-  async execute(senderId, args, pageAccessToken) {
-
+  async execute(senderId, args, pageAccessToken, event) {
     let text;
     let lang;
 
     /* ===== REPLY MODE ===== */
     if (args.length === 1) {
       lang = args[0].toLowerCase();
-      text = global.lastTextMessage?.[senderId];
+
+      text = event?.message?.reply_to?.text;
 
       if (!text) {
         return sendMessage(
           senderId,
-          { text: '❌ No previous text message found to translate.' },
+          { text: '❌ Please reply to a TEXT message.' },
           pageAccessToken
         );
       }
@@ -48,32 +48,34 @@ module.exports = {
 
     /* ===== API TRANSLATE ===== */
     try {
-      const res = await axios.get(
+      const { data } = await axios.get(
         'https://miko-utilis.vercel.app/api/translate',
         {
           params: {
             text,
             to: lang
-          }
+          },
+          timeout: 15000
         }
       );
 
-      if (!res.data?.success) throw new Error('API failed');
+      if (!data?.success) throw new Error('API failed');
 
-      const translated = res.data.translated_text.translated;
+      const translated = data.translated_text.translated;
 
       await sendMessage(
         senderId,
         {
           text:
 `🌍 Translation
-
+・────────────・
 📝 Original:
 ${text}
 
 🔤 To: ${lang}
 ✅ Result:
-${translated}`
+${translated}
+・────────────・`
         },
         pageAccessToken
       );
