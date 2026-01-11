@@ -3,7 +3,7 @@ const { sendMessage } = require('../handles/sendMessage');
 
 const OWNER_ID = '8592033747492364';
 
-// 🌍 États globaux
+// 🔁 États globaux
 global.aiEnabled = global.aiEnabled ?? true;
 global.aiModel = global.aiModel ?? 'copilot';
 
@@ -11,7 +11,7 @@ global.aiModel = global.aiModel ?? 'copilot';
 const memory = new Map();
 const MAX_MEMORY = 10;
 
-// ✂️ Pagination Messenger
+// ✂️ Découpe + pagination
 function paginate(text, max = 1800) {
   const pages = [];
   for (let i = 0; i < text.length; i += max) {
@@ -20,7 +20,28 @@ function paginate(text, max = 1800) {
   return pages;
 }
 
-// 🧠 Contexte
+// 📸 Image depuis reply
+async function getReplyImage(event, pageAccessToken) {
+  const mid = event?.message?.reply_to?.mid;
+  if (!mid) return null;
+
+  try {
+    const { data } = await axios.get(
+      `https://graph.facebook.com/v19.0/${mid}/attachments`,
+      { params: { access_token: pageAccessToken } }
+    );
+
+    return (
+      data?.data?.[0]?.image_data?.url ||
+      data?.data?.[0]?.file_url ||
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
+// 🧠 Contexte mémoire
 function buildContext(senderId, question) {
   const hist = memory.get(senderId) || [];
   let ctx = '';
@@ -44,17 +65,16 @@ function saveMemory(senderId, q, a) {
 module.exports = {
   name: 'ai',
   author: 'Jonathan',
+  description: 'Anime Focus AI with ON/OFF, model switch, memory, image vision, pagination',
+  usage: 'ai <question> | ai on | ai off | ai switch copilot|gemini | ai reset',
 
-  async execute(senderId, args, pageAccessToken) {
+  async execute(senderId, args, pageAccessToken, event) {
 
-    /* =====================
-       🔐 AI ON / OFF
-       ===================== */
+    /* 🔐 AI ON / OFF */
     if (['on', 'off'].includes(args[0])) {
       if (senderId !== OWNER_ID) {
         return sendMessage(senderId, { text: '' }, pageAccessToken);
       }
-
       global.aiEnabled = args[0] === 'on';
       return sendMessage(
         senderId,
@@ -63,14 +83,11 @@ module.exports = {
       );
     }
 
-    /* =====================
-       🔀 SWITCH MODEL
-       ===================== */
+    /* 🔀 SWITCH MODEL */
     if (args[0] === 'switch') {
       if (senderId !== OWNER_ID) {
         return sendMessage(senderId, { text: '' }, pageAccessToken);
       }
-
       const model = args[1]?.toLowerCase();
       if (!['copilot', 'gemini'].includes(model)) {
         return sendMessage(
@@ -79,29 +96,24 @@ module.exports = {
           pageAccessToken
         );
       }
-
       global.aiModel = model;
       return sendMessage(
         senderId,
-        { text: `🔄 AI switched to ${model.toUpperCase()}` },
+        { text: `🔄 AI model switched to ${model.toUpperCase()}` },
         pageAccessToken
       );
     }
 
-    /* =====================
-       🚫 AI OFF
-       ===================== */
+    /* 🚫 AI OFF */
     if (!global.aiEnabled && senderId !== OWNER_ID) {
       return sendMessage(
         senderId,
-        { text: '🚫 AI disabled by owner.' },
+        { text: '' },
         pageAccessToken
       );
     }
 
-    /* =====================
-       🔁 RESET
-       ===================== */
+    /* 🔁 RESET */
     if (args[0] === 'reset') {
       memory.delete(senderId);
       return sendMessage(
@@ -123,38 +135,39 @@ module.exports = {
     await sendMessage(senderId, { text: '' }, pageAccessToken);
 
     try {
+      const imageUrl = await getReplyImage(event, pageAccessToken);
       const prompt = buildContext(senderId, question);
-      let response;
+
+      let response = null;
       let usedModel = global.aiModel;
 
-      /* =====================
-         🧠 COPILOT (NEKOLABS)
-         ===================== */
+      /* ===== COPILOT ===== */
       if (global.aiModel === 'copilot') {
-        const { data } = await axios.get(
-          'https://api.nekolabs.web.id/text.gen/copilot',
-          {
-            params: { text: prompt },
-            timeout: 30000
+        try {
+          const { data } = await axios.get(
+            'https://api.nekolabs.web.id/text.gen/copilot',
+            {
+              params: { text: prompt },
+              timeout: 20000
+            }
+          );
+
+          if (data?.success && data?.result?.text) {
+            response = data.result.text.trim();
           }
-        );
-
-        if (!data?.success || !data?.result?.text) {
-          throw new Error('Copilot failed');
-        }
-
-        response = data.result.text.trim();
+        } catch {}
       }
 
-      /* =====================
-         🌟 GEMINI (NEKOLABS)
-         ===================== */
-      if (global.aiModel === 'gemini') {
+      /* ===== GEMINI (fallback) ===== */
+      if (!response) {
+        usedModel = 'gemini';
         const { data } = await axios.get(
           'https://api.nekolabs.web.id/text.gen/gemini/2.5-pro',
           {
             params: {
               text: prompt,
+              systemPrompt: 'You are a helpful assistant',
+              imageUrl: imageUrl || undefined,
               sessionId: senderId
             },
             timeout: 30000
@@ -162,9 +175,8 @@ module.exports = {
         );
 
         if (!data?.success || !data?.result) {
-          throw new Error('Gemini failed');
+          throw new Error('All models failed');
         }
-
         response = data.result.trim();
       }
 
@@ -184,11 +196,8 @@ module.exports = {
 `${header}
 ${pages[i]}
 
+📄 (${i + 1}/${pages.length})
 ${footer}`;
-
-        if (pages.length > 1) {
-          msg += `\n📄 (${i + 1}/${pages.length})`;
-        }
 
         await sendMessage(senderId, { text: msg }, pageAccessToken);
       }
@@ -197,7 +206,7 @@ ${footer}`;
       console.error('AI ERROR:', err.message);
       await sendMessage(
         senderId,
-        { text: '❌ AI failed. Try again later.' },
+        { text: '❌ AI failed. Try later.' },
         pageAccessToken
       );
     }
