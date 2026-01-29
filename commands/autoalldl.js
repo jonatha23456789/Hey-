@@ -10,17 +10,17 @@ module.exports = {
       const messageText = event?.message?.text;
       if (!messageText) return;
 
-      // 🔹 Extraire le lien
+      // 🔹 Extract URL
       const urlMatch = messageText.match(/https?:\/\/[^\s]+/);
       if (!urlMatch) return;
 
       const videoUrl = urlMatch[0];
 
-      // 🔹 Appel API
-      const apiUrl = `https://api-library-kohi.onrender.com/api/alldl?url=${encodeURIComponent(videoUrl)}`;
-      const res = await axios.get(apiUrl);
+      // 🔹 Call NEW API
+      const apiUrl = `https://rynekoo-api.hf.space/downloader/aio/v3?url=${encodeURIComponent(videoUrl)}`;
+      const { data } = await axios.get(apiUrl, { timeout: 30000 });
 
-      if (!res.data?.status || !res.data?.data?.videoUrl) {
+      if (!data?.success || !data?.result?.medias?.length) {
         return sendMessage(
           senderId,
           { text: '❌ Failed to fetch downloadable video.' },
@@ -28,25 +28,43 @@ module.exports = {
         );
       }
 
-      const { videoUrl: downloadUrl, platform } = res.data.data;
+      const { medias, source, title } = data.result;
 
-      // 🔹 Message info
+      // 🔹 Pick BEST quality (HD > SD)
+      const bestMedia =
+        medias.find(m => m.quality === 'hd' && m.videoAvailable) ||
+        medias.find(m => m.videoAvailable);
+
+      if (!bestMedia?.url) {
+        return sendMessage(
+          senderId,
+          { text: '❌ No playable video found.' },
+          pageAccessToken
+        );
+      }
+
+      // 🔹 Info message
       await sendMessage(
         senderId,
         {
-          text: `✅ Video detected\n📌 Platform: ${platform}\n⬇ Sending video...`
+          text:
+`✅ Video detected
+📌 Platform: ${source}
+🎞️ Title: ${title || 'Unknown'}
+🎚️ Quality: ${bestMedia.quality?.toUpperCase() || 'UNKNOWN'}
+⬇ Sending video...`
         },
         pageAccessToken
       );
 
-      // 🔹 Envoi DIRECT de la vidéo (MEILLEURE MÉTHODE)
+      // 🔹 Send video directly
       await sendMessage(
         senderId,
         {
           attachment: {
             type: 'video',
             payload: {
-              url: downloadUrl
+              url: bestMedia.url
             }
           }
         },
@@ -54,7 +72,7 @@ module.exports = {
       );
 
     } catch (err) {
-      console.error('autoalldl error:', err.message || err);
+      console.error('autoalldl error:', err.response?.data || err.message);
       await sendMessage(
         senderId,
         { text: '❌ Error while downloading video.' },
