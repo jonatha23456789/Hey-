@@ -149,11 +149,11 @@ module.exports = {
       let response;
       let usedModel = global.aiModel;
 
-      /* ===== COPILOT (NEKOLABS) ===== */
+      /* ===== COPILOT (RYNEKOO) ===== */
       if (global.aiModel === 'copilot') {
         try {
           const { data } = await axios.get(
-            'https://api.nekolabs.web.id/text.gen/copilot',
+            'https://rynekoo-api.hf.space/text.gen/copilot',
             { params: { text: prompt } }
           );
 
@@ -163,15 +163,16 @@ module.exports = {
         } catch {}
       }
 
-      /* ===== GEMINI FALLBACK ===== */
+      /* ===== GEMINI (RYNEKOO) ===== */
       if (!response) {
         usedModel = 'gemini';
 
         const { data } = await axios.get(
-          'https://api.nekolabs.web.id/text.gen/gemini/2.5-pro',
+          'https://rynekoo-api.hf.space/text.gen/gemini/2.5-flash',
           {
             params: {
               text: prompt,
+              systemPrompt: 'You are a helpful assistant',
               imageUrl: imageUrl || undefined,
               sessionId: senderId
             }
