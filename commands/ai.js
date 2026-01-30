@@ -11,7 +11,7 @@ global.aiModel = global.aiModel ?? 'copilot';
 const memory = new Map();
 const MAX_MEMORY = 10;
 
-// ===== PAGINATION (HEADER ONLY PAGE 1) =====
+// ===== PAGINATION =====
 function paginate(text, model, max = 1800) {
   const pages = [];
   let buffer = '';
@@ -85,9 +85,7 @@ module.exports = {
 
     /* ===== AI ON / OFF ===== */
     if (['on', 'off'].includes(args[0])) {
-      if (senderId !== OWNER_ID) {
-        return sendMessage(senderId, { text: '' }, pageAccessToken);
-      }
+      if (senderId !== OWNER_ID) return;
 
       global.aiEnabled = args[0] === 'on';
       return sendMessage(
@@ -99,9 +97,7 @@ module.exports = {
 
     /* ===== SWITCH MODEL ===== */
     if (args[0] === 'switch') {
-      if (senderId !== OWNER_ID) {
-        return sendMessage(senderId, { text: '' }, pageAccessToken);
-      }
+      if (senderId !== OWNER_ID) return;
 
       const model = args[1]?.toLowerCase();
       if (!['copilot', 'gemini'].includes(model)) {
@@ -129,7 +125,7 @@ module.exports = {
       );
     }
 
-    /* ===== RESET ===== */
+    /* ===== RESET MEMORY ===== */
     if (args[0] === 'reset') {
       memory.delete(senderId);
       return sendMessage(senderId, { text: '🧠 Memory cleared.' }, pageAccessToken);
@@ -139,8 +135,6 @@ module.exports = {
     if (!question) {
       return sendMessage(senderId, { text: '⚠️ Usage: ai <question>' }, pageAccessToken);
     }
-
-    await sendMessage(senderId, { text: '' }, pageAccessToken);
 
     try {
       const imageUrl = await getReplyImage(event, pageAccessToken);
@@ -163,27 +157,25 @@ module.exports = {
         } catch {}
       }
 
-      /* ===== GEMINI (RYNEKOO) ===== */
+      /* ===== GEMINI (NORCH FLASH-LITE) ===== */
       if (!response) {
         usedModel = 'gemini';
 
         const { data } = await axios.get(
-          'https://rynekoo-api.hf.space/text.gen/gemini/2.5-flash',
+          'https://norch-project.gleeze.com/api/gemini/2.5/flash-lite',
           {
             params: {
-              text: prompt,
-              systemPrompt: 'You are a helpful assistant',
-              imageUrl: imageUrl || undefined,
-              sessionId: senderId
+              prompt: prompt,
+              imageurl: imageUrl || undefined
             }
           }
         );
 
-        if (!data?.success || !data?.result) {
-          throw new Error('All models failed');
+        if (!data?.response) {
+          throw new Error('Gemini failed');
         }
 
-        response = data.result.trim();
+        response = data.response.trim();
       }
 
       saveMemory(senderId, question, response);
