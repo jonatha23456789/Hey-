@@ -20,14 +20,17 @@ module.exports = {
     }
 
     const [emoji1, emoji2] = args;
-    const apiUrl = `https://delirius-apiofc.vercel.app/tools/mixed?emoji1=${encodeURIComponent(
+
+    // 🔹 Nouvelle API Railway
+    const apiUrl = `https://betadash-api-swordslush-production.up.railway.app/emojimix?emoji1=${encodeURIComponent(
       emoji1
     )}&emoji2=${encodeURIComponent(emoji2)}`;
 
     try {
       const { data } = await axios.get(apiUrl);
 
-      if (!data?.status || !data?.data?.url) {
+      // Vérifier que l’API a renvoyé un URL
+      if (!data?.results?.url) {
         return sendMessage(
           senderId,
           { text: "❌ Failed to generate emoji mix image." },
@@ -35,7 +38,7 @@ module.exports = {
         );
       }
 
-      const imageUrl = data.data.url;
+      const imageUrl = data.results.url;
 
       // 🔹 Téléchargement de l’image localement
       const imgPath = path.join(__dirname, `emojimix_${Date.now()}.png`);
@@ -64,7 +67,7 @@ module.exports = {
       await sendMessage(
         senderId,
         {
-          text: `✨ *Emoji Mix Created!*\n\n${emoji1} + ${emoji2} = 🧪\n📡 Source: Delirius`,
+          text: `✨ *Emoji Mix Created!*\n\n${emoji1} + ${emoji2} = 🧪\n📡 Source: Railway`,
         },
         pageAccessToken
       );
