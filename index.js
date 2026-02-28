@@ -9,16 +9,18 @@ const VERIFY_TOKEN = 'pagebot';
 const COMMANDS_PATH = join(__dirname, 'commands');
 const GRAPH_API = 'https://graph.facebook.com/v23.0/me';
 
-// ✅ USE ENV VARIABLE INSTEAD OF token.txt
+// ✅ Use environment variable
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 
-app.use(express.json({ limit: '10mb' }));
-
-// Safety check
+// 🔹 Check token
 if (!PAGE_ACCESS_TOKEN) {
   console.error("❌ PAGE_ACCESS_TOKEN is not set in environment variables");
   process.exit(1);
 }
+
+console.log("✅ PAGE_ACCESS_TOKEN loaded:", PAGE_ACCESS_TOKEN.slice(0, 20) + "...");
+
+app.use(express.json({ limit: '10mb' }));
 
 const apiCall = async (endpoint, data) => {
   const response = await fetch(`${GRAPH_API}${endpoint}?access_token=${PAGE_ACCESS_TOKEN}`, {
@@ -27,7 +29,10 @@ const apiCall = async (endpoint, data) => {
     body: JSON.stringify(data)
   });
 
-  if (!response.ok) throw new Error(`API Error: ${response.status}`);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`API Error: ${response.status} - ${errorText}`);
+  }
   return response.json();
 };
 
@@ -36,13 +41,15 @@ const clearMenu = async () => {
     await fetch(`${GRAPH_API}/messenger_profile?access_token=${PAGE_ACCESS_TOKEN}&fields=persistent_menu,get_started`, {
       method: 'DELETE'
     });
+    console.log("✅ Existing menu cleared");
   } catch (e) {
-    console.error('Menu clear warning:', e.message);
+    console.error('⚠️ Menu clear warning:', e.message);
   }
 };
 
 const setupMenu = async () => {
   try {
+    console.log("🚀 Setting up menu...");
     await clearMenu();
 
     const menuItems = [{
@@ -60,9 +67,10 @@ const setupMenu = async () => {
       }]
     });
 
-    console.log(`✅ Menu set to Help only`);
+    console.log(`✅ Menu set successfully`);
   } catch (e) {
     console.error('❌ Menu setup failed:', e.message);
+    console.error("Make sure your token is valid, app is live, and page is connected.");
   }
 };
 
@@ -79,6 +87,7 @@ const startWatcher = async () => {
   }
 };
 
+// Webhook verification
 app.get('/webhook', (req, res) => {
   const { 'hub.mode': mode, 'hub.verify_token': token, 'hub.challenge': challenge } = req.query;
 
@@ -90,6 +99,7 @@ app.get('/webhook', (req, res) => {
   return res.sendStatus(403);
 });
 
+// Webhook messages
 app.post('/webhook', (req, res) => {
   if (req.body.object !== 'page') return res.sendStatus(404);
 
@@ -103,10 +113,10 @@ app.post('/webhook', (req, res) => {
   res.status(200).send('EVENT_RECEIVED');
 });
 
+// Start server
 const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  setupMenu();
+  await setupMenu();
   startWatcher();
 });
