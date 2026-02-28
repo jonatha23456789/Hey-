@@ -20,17 +20,15 @@ module.exports = {
     }
 
     const [emoji1, emoji2] = args;
-
-    // 🔹 Nouvelle API Railway
-    const apiUrl = `https://betadash-api-swordslush-production.up.railway.app/emojimix?emoji1=${encodeURIComponent(
+    const apiUrl = `https://azadx69x-all-apis-top.vercel.app/api/emojimix?e1=${encodeURIComponent(
       emoji1
-    )}&emoji2=${encodeURIComponent(emoji2)}`;
+    )}&e2=${encodeURIComponent(emoji2)}`;
 
     try {
       const { data } = await axios.get(apiUrl);
 
-      // Vérifier que l’API a renvoyé un URL
-      if (!data?.results?.url) {
+      // ✅ Vérification stricte de l'API
+      if (!data?.success || !data?.result?.image_url) {
         return sendMessage(
           senderId,
           { text: "❌ Failed to generate emoji mix image." },
@@ -38,7 +36,7 @@ module.exports = {
         );
       }
 
-      const imageUrl = data.results.url;
+      const imageUrl = data.result.image_url;
 
       // 🔹 Téléchargement de l’image localement
       const imgPath = path.join(__dirname, `emojimix_${Date.now()}.png`);
@@ -67,7 +65,7 @@ module.exports = {
       await sendMessage(
         senderId,
         {
-          text: `✨ *Emoji Mix Created!*\n\n${emoji1} + ${emoji2} = 🧪\n📡 Source: Railway`,
+          text: `✨ *Emoji Mix Created!*\n\n${emoji1} + ${emoji2} = 🧪\n📡 Source: Azadx69x`,
         },
         pageAccessToken
       );
