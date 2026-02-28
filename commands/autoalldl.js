@@ -17,29 +17,31 @@ module.exports = {
 
       const videoUrl = urlMatch[0];
 
-      // 🔹 Call NEW API (Railway fbdownv2)
-      const apiUrl = `https://betadash-api-swordslush-production.up.railway.app/fbdownv2?url=${encodeURIComponent(videoUrl)}`;
+      // 🔹 Call NEW API
+      const apiUrl = `https://azadx69x-all-apis-top.vercel.app/api/alldl?url=${encodeURIComponent(videoUrl)}`;
 
       const { data } = await axios.get(apiUrl, { timeout: 30000 });
 
-      if (!data?.results) {
+      if (!data?.success || !data?.result) {
         return sendMessage(
           senderId,
-          { text: '❌ Failed to fetch video data.' },
+          { text: '❌ Failed to fetch video data from API.' },
           pageAccessToken
         );
       }
 
-      const { title, description, duration, thumbnail, download_links } = data.results;
+      const { result } = data;
+      const { title, thumbnail, medias, source } = result;
 
-      const videoLink =
-        download_links?.hd ||
-        download_links?.sd;
+      // 🔹 Choisir la meilleure qualité (HD > SD)
+      const bestMedia =
+        medias.find(m => m.quality === 'hd' && m.videoAvailable) ||
+        medias.find(m => m.videoAvailable);
 
-      if (!videoLink) {
+      if (!bestMedia?.url) {
         return sendMessage(
           senderId,
-          { text: '❌ No downloadable video found.' },
+          { text: '❌ No playable video found.' },
           pageAccessToken
         );
       }
@@ -51,8 +53,8 @@ module.exports = {
           text:
 `✅ Facebook Video Detected
 🎞 Title: ${title || 'Unknown'}
-⏱ Duration: ${duration || 'Unknown'}
-🎚 Quality: ${download_links?.hd ? 'HD' : 'SD'}
+🎚 Quality: ${bestMedia.quality?.toUpperCase() || 'UNKNOWN'}
+📡 Source: ${source || 'Facebook'}
 ⬇ Sending video...`
         },
         pageAccessToken
@@ -79,7 +81,7 @@ module.exports = {
           attachment: {
             type: 'video',
             payload: {
-              url: videoLink,
+              url: bestMedia.url,
               is_reusable: true
             }
           }
