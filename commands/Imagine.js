@@ -3,7 +3,7 @@ const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
   name: 'imagine',
-  description: 'Generate AI images using Nekolabs Imagen 4.0-fast',
+  description: 'Generate AI images using Christus API (xl + animagine)',
   usage: '-imagine <prompt> [1:1 | 16:9 | 9:16]',
   author: 'Jonathan',
 
@@ -39,29 +39,45 @@ module.exports = {
       pageAccessToken
     );
 
+    // 🔹 Encodage du prompt pour l'URL
+    const encodedPrompt = encodeURIComponent(prompt);
+
+    // 🔹 API endpoints
+    const apis = [
+      `https://christus-api.vercel.app/image/xl?prompt=${encodedPrompt}`,
+      `https://christus-api.vercel.app/image/animagine?prompt=${encodedPrompt}`
+    ];
+
+    let imageUrl = null;
+    let usedApi = null;
+
     try {
-      const apiUrl = 'https://api.nekolabs.web.id/img.gen/imagen/4.0-fast';
-
-      const { data } = await axios.get(apiUrl, {
-        params: {
-          prompt: prompt,
-          ratio: ratio
+      // 🔹 Essayer la première API
+      for (const apiUrl of apis) {
+        try {
+          const { data } = await axios.get(apiUrl, { timeout: 60000 });
+          if (data?.status && data?.image_url) {
+            imageUrl = data.image_url;
+            usedApi = apiUrl.includes('xl') ? 'XL' : 'Animagine';
+            break;
+          }
+        } catch (err) {
+          console.warn(`API failed: ${apiUrl} - ${err.message}`);
+          continue; // passer à la prochaine API
         }
-      });
+      }
 
-      // ✅ Vérification stricte
-      if (!data || data.success !== true || !data.result) {
+      if (!imageUrl) {
         return sendMessage(
           senderId,
-          { text: '❌ Image generation failed (invalid API response).' },
+          { text: '❌ Failed to generate image from both APIs.' },
           pageAccessToken
         );
       }
 
-      const imageUrl = data.result;
       const deco = '・───── >ᴗ< ─────・';
 
-      // 📝 Texte
+      // 📝 Message texte
       await sendMessage(
         senderId,
         {
@@ -73,28 +89,26 @@ module.exports = {
 ${prompt}
 
 📐 Ratio: ${ratio}
+📡 Source: ${usedApi}
 ${deco}`
         },
         pageAccessToken
       );
 
-      // 🖼️ Image
+      // 🖼️ Envoi de l’image
       await sendMessage(
         senderId,
         {
           attachment: {
             type: 'image',
-            payload: {
-              url: imageUrl,
-              is_reusable: true
-            }
+            payload: { url: imageUrl, is_reusable: true }
           }
         },
         pageAccessToken
       );
 
     } catch (error) {
-      console.error('Imagine Command Error:', error.response?.data || error.message);
+      console.error('Imagine Command Error:', error.response?.data || error.message || error);
       await sendMessage(
         senderId,
         { text: '❌ Error while generating the image. Please try again later.' },
