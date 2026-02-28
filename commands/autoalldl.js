@@ -1,11 +1,12 @@
 const axios = require('axios');
+const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
   name: 'autoalldl',
-  description: 'Detect and auto-download videos from shared links',
+  description: 'Detect and auto-download Facebook videos from shared links',
   author: 'coffee',
 
-  async execute(senderId, args, pageAccessToken, event, sendMessage) {
+  async execute(senderId, args, pageAccessToken, event) {
     try {
       const messageText = event?.message?.text;
       if (!messageText) return;
@@ -16,29 +17,29 @@ module.exports = {
 
       const videoUrl = urlMatch[0];
 
-      // 🔹 Call NEW API
-      const apiUrl = `https://rynekoo-api.hf.space/downloader/aio/v3?url=${encodeURIComponent(videoUrl)}`;
+      // 🔹 Call NEW API (Railway fbdownv2)
+      const apiUrl = `https://betadash-api-swordslush-production.up.railway.app/fbdownv2?url=${encodeURIComponent(videoUrl)}`;
+
       const { data } = await axios.get(apiUrl, { timeout: 30000 });
 
-      if (!data?.success || !data?.result?.medias?.length) {
+      if (!data?.results) {
         return sendMessage(
           senderId,
-          { text: '❌ Failed to fetch downloadable video.' },
+          { text: '❌ Failed to fetch video data.' },
           pageAccessToken
         );
       }
 
-      const { medias, source, title } = data.result;
+      const { title, description, duration, thumbnail, download_links } = data.results;
 
-      // 🔹 Pick BEST quality (HD > SD)
-      const bestMedia =
-        medias.find(m => m.quality === 'hd' && m.videoAvailable) ||
-        medias.find(m => m.videoAvailable);
+      const videoLink =
+        download_links?.hd ||
+        download_links?.sd;
 
-      if (!bestMedia?.url) {
+      if (!videoLink) {
         return sendMessage(
           senderId,
-          { text: '❌ No playable video found.' },
+          { text: '❌ No downloadable video found.' },
           pageAccessToken
         );
       }
@@ -48,23 +49,38 @@ module.exports = {
         senderId,
         {
           text:
-`✅ Video detected
-📌 Platform: ${source}
-🎞️ Title: ${title || 'Unknown'}
-🎚️ Quality: ${bestMedia.quality?.toUpperCase() || 'UNKNOWN'}
+`✅ Facebook Video Detected
+🎞 Title: ${title || 'Unknown'}
+⏱ Duration: ${duration || 'Unknown'}
+🎚 Quality: ${download_links?.hd ? 'HD' : 'SD'}
 ⬇ Sending video...`
         },
         pageAccessToken
       );
 
-      // 🔹 Send video directly
+      // 🔹 Optional thumbnail preview
+      if (thumbnail) {
+        await sendMessage(
+          senderId,
+          {
+            attachment: {
+              type: 'image',
+              payload: { url: thumbnail }
+            }
+          },
+          pageAccessToken
+        );
+      }
+
+      // 🔹 Send video
       await sendMessage(
         senderId,
         {
           attachment: {
             type: 'video',
             payload: {
-              url: bestMedia.url
+              url: videoLink,
+              is_reusable: true
             }
           }
         },
@@ -75,7 +91,7 @@ module.exports = {
       console.error('autoalldl error:', err.response?.data || err.message);
       await sendMessage(
         senderId,
-        { text: '❌ Error while downloading video.' },
+        { text: '❌ Error while downloading Facebook video.' },
         pageAccessToken
       );
     }
