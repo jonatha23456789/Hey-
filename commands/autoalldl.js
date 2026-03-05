@@ -17,71 +17,70 @@ module.exports = {
 
       const videoUrl = urlMatch[0];
 
-      // 🔹 Call NEW API
-      const apiUrl = `https://azadx69x-all-apis-top.vercel.app/api/alldl?url=${encodeURIComponent(videoUrl)}`;
+      // 🔹 NEW API
+      const apiUrl = `https://xnil6x-api-7io2.onrender.com/download/alldl?url=${encodeURIComponent(videoUrl)}`;
 
       const { data } = await axios.get(apiUrl, { timeout: 30000 });
 
-      if (!data?.success || !data?.result) {
+      if (!data?.success || !data?.data?.status) {
         return sendMessage(
           senderId,
-          { text: '❌ Failed to fetch video data from API.' },
+          { text: '❌ Failed to fetch video data.' },
           pageAccessToken
         );
       }
 
-      const { result } = data;
-      const { title, thumbnail, medias, source } = result;
+      const videoData = data.data;
+      const title = videoData.title || 'Facebook Video';
+      const videoDirectUrl = videoData.url;
+      const thumbnail = videoData.thumbnail;
 
-      // 🔹 Choisir la meilleure qualité (HD > SD)
-      const bestMedia =
-        medias.find(m => m.quality === 'hd' && m.videoAvailable) ||
-        medias.find(m => m.videoAvailable);
-
-      if (!bestMedia?.url) {
+      if (!videoDirectUrl) {
         return sendMessage(
           senderId,
-          { text: '❌ No playable video found.' },
+          { text: '❌ No downloadable video found.' },
           pageAccessToken
         );
       }
 
-      // 🔹 Info message
+      // 🔹 Info Message
       await sendMessage(
         senderId,
         {
           text:
 `✅ Facebook Video Detected
-🎞 Title: ${title || 'Unknown'}
-🎚 Quality: ${bestMedia.quality?.toUpperCase() || 'UNKNOWN'}
-📡 Source: ${source || 'Facebook'}
+🎞 Title: ${title}
+📡 Platform: ${data.platform || 'Facebook'}
 ⬇ Sending video...`
         },
         pageAccessToken
       );
 
-      // 🔹 Optional thumbnail preview
+      // 🔹 Thumbnail (optional preview)
       if (thumbnail) {
         await sendMessage(
           senderId,
           {
             attachment: {
               type: 'image',
-              payload: { url: thumbnail }
+              payload: {
+                url: thumbnail,
+                is_reusable: true
+              }
             }
           },
           pageAccessToken
         );
       }
 
-      // 🔹 Send video
+      // 🔹 Send Video
       await sendMessage(
         senderId,
         {
           attachment: {
             type: 'video',
             payload: {
-              url: bestMedia.url,
+              url: videoDirectUrl,
               is_reusable: true
             }
           }
@@ -93,7 +92,7 @@ module.exports = {
       console.error('autoalldl error:', err.response?.data || err.message);
       await sendMessage(
         senderId,
-        { text: '❌ Error while downloading Facebook video.' },
+        { text: '❌ Error while downloading video.' },
         pageAccessToken
       );
     }
