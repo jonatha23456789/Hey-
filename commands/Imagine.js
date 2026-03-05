@@ -12,45 +12,39 @@ module.exports = {
     if (!args.length) {
       return sendMessage(
         senderId,
-        { text: "⚠️ Usage:\n-imagine <prompt>" },
+        { text: "⚠️ Usage: -imagine <prompt>" },
         pageAccessToken
       );
     }
 
     const prompt = args.join(" ");
-    const encodedPrompt = encodeURIComponent(prompt);
-
-    const api = `https://christus-api.vercel.app/image/animagine?prompt=${encodedPrompt}`;
+    const api = `https://christus-api.vercel.app/image/animagine?prompt=${encodeURIComponent(prompt)}`;
 
     try {
 
-      // ⏳ Countdown message
       await sendMessage(
         senderId,
-        { text: "🎨 Generating image...\n⏳ Please wait 10 seconds..." },
+        { text: "🎨 Generating your AI image...\n⏳ Please wait..." },
         pageAccessToken
       );
 
       const res = await axios.get(api);
 
-      if (!res.data || !res.data.image_url) {
+      // détecte plusieurs types de réponses API
+      const imageUrl =
+        res.data?.image_url ||
+        res.data?.url ||
+        res.data?.image ||
+        res.data?.data;
+
+      if (!imageUrl) {
+        console.log("API RESPONSE:", res.data);
         return sendMessage(
           senderId,
-          { text: "❌ Failed to generate image." },
+          { text: "❌ API did not return an image." },
           pageAccessToken
         );
       }
-
-      const imageUrl = res.data.image_url;
-
-      const msg =
-`✨ AI Image Generated
-
-📝 Prompt:
-${prompt}
-
-🖼️ Model: Animagine
-✅ Status: Success`;
 
       await sendMessage(
         senderId,
@@ -61,8 +55,7 @@ ${prompt}
               url: imageUrl,
               is_reusable: true
             }
-          },
-          text: msg
+          }
         },
         pageAccessToken
       );
@@ -70,9 +63,9 @@ ${prompt}
     } catch (error) {
       console.error("AI IMAGE ERROR:", error.response?.data || error.message);
 
-      await sendMessage(
+      sendMessage(
         senderId,
-        { text: "❌ Error generating image." },
+        { text: "❌ Failed to generate image. API may be offline." },
         pageAccessToken
       );
     }
