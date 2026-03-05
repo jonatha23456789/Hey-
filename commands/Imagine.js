@@ -1,117 +1,78 @@
-const axios = require('axios');
-const { sendMessage } = require('../handles/sendMessage');
+const axios = require("axios");
+const { sendMessage } = require("../handles/sendMessage");
 
 module.exports = {
-  name: 'imagine',
-  description: 'Generate AI images using Christus API (xl + animagine)',
-  usage: '-imagine <prompt> [1:1 | 16:9 | 9:16]',
-  author: 'Jonathan',
+  name: "imagine",
+  description: "Generate AI image",
+  usage: "-imagine <prompt>",
+  author: "Jonathan",
 
   async execute(senderId, args, pageAccessToken) {
+
     if (!args.length) {
       return sendMessage(
         senderId,
-        { text: '⚠️ Usage:\n-imagine <prompt> [1:1 | 16:9 | 9:16]' },
+        { text: "⚠️ Usage:\n-imagine <prompt>" },
         pageAccessToken
       );
     }
 
-    // 🔹 Détecter le ratio (dernier argument)
-    let ratio = '1:1';
-    const lastArg = args[args.length - 1];
-    if (['1:1', '16:9', '9:16'].includes(lastArg)) {
-      ratio = lastArg;
-      args.pop();
-    }
-
-    const prompt = args.join(' ').trim();
-    if (!prompt) {
-      return sendMessage(
-        senderId,
-        { text: '⚠️ Please provide a valid prompt.' },
-        pageAccessToken
-      );
-    }
-
-    await sendMessage(
-      senderId,
-      { text: '🎨 Generating image, please wait...' },
-      pageAccessToken
-    );
-
-    // 🔹 Encodage du prompt pour l'URL
+    const prompt = args.join(" ");
     const encodedPrompt = encodeURIComponent(prompt);
 
-    // 🔹 API endpoints
-    const apis = [
-      `https://christus-api.vercel.app/image/xl?prompt=${encodedPrompt}`,
-      `https://christus-api.vercel.app/image/animagine?prompt=${encodedPrompt}`
-    ];
-
-    let imageUrl = null;
-    let usedApi = null;
+    const api = `https://christus-api.vercel.app/image/animagine?prompt=${encodedPrompt}`;
 
     try {
-      // 🔹 Essayer la première API
-      for (const apiUrl of apis) {
-        try {
-          const { data } = await axios.get(apiUrl, { timeout: 60000 });
-          if (data?.status && data?.image_url) {
-            imageUrl = data.image_url;
-            usedApi = apiUrl.includes('xl') ? 'XL' : 'Animagine';
-            break;
-          }
-        } catch (err) {
-          console.warn(`API failed: ${apiUrl} - ${err.message}`);
-          continue; // passer à la prochaine API
-        }
-      }
 
-      if (!imageUrl) {
+      // ⏳ Countdown message
+      await sendMessage(
+        senderId,
+        { text: "🎨 Generating image...\n⏳ Please wait 10 seconds..." },
+        pageAccessToken
+      );
+
+      const res = await axios.get(api);
+
+      if (!res.data || !res.data.image_url) {
         return sendMessage(
           senderId,
-          { text: '❌ Failed to generate image from both APIs.' },
+          { text: "❌ Failed to generate image." },
           pageAccessToken
         );
       }
 
-      const deco = '・───── >ᴗ< ─────・';
+      const imageUrl = res.data.image_url;
 
-      // 📝 Message texte
-      await sendMessage(
-        senderId,
-        {
-          text:
-`${deco}
-🎨 | AI Image Generated
+      const msg =
+`✨ AI Image Generated
 
-🖌 Prompt:
+📝 Prompt:
 ${prompt}
 
-📐 Ratio: ${ratio}
-📡 Source: ${usedApi}
-${deco}`
-        },
-        pageAccessToken
-      );
+🖼️ Model: Animagine
+✅ Status: Success`;
 
-      // 🖼️ Envoi de l’image
       await sendMessage(
         senderId,
         {
           attachment: {
-            type: 'image',
-            payload: { url: imageUrl, is_reusable: true }
-          }
+            type: "image",
+            payload: {
+              url: imageUrl,
+              is_reusable: true
+            }
+          },
+          text: msg
         },
         pageAccessToken
       );
 
     } catch (error) {
-      console.error('Imagine Command Error:', error.response?.data || error.message || error);
+      console.error("AI IMAGE ERROR:", error.response?.data || error.message);
+
       await sendMessage(
         senderId,
-        { text: '❌ Error while generating the image. Please try again later.' },
+        { text: "❌ Error generating image." },
         pageAccessToken
       );
     }
