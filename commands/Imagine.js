@@ -4,55 +4,58 @@ const { sendMessage } = require("../handles/sendMessage");
 module.exports = {
   name: "imagine",
   description: "GENERATE IMAGE FROM PROMPT",
-  usage: "imagine [prompt]",
-  author: "Coffee",
+  usage: "imagine <prompt>",
+  author: "Jonathan",
 
   async execute(senderId, args, pageAccessToken) {
     try {
-      const prompt = args.join(" ");
+      const prompt = args.join(" ").trim();
 
       if (!prompt) {
         return sendMessage(
           senderId,
-          { text: "⚠️ | Please provide a prompt." },
+          { text: "⚠️ Usage: imagine <prompt>" },
           pageAccessToken
         );
       }
 
       await sendMessage(
         senderId,
-        { text: "🎨 Generating image..." },
+        { text: "🎨 Generating image, please wait..." },
         pageAccessToken
       );
 
-      const apiUrl = `https://christus-api.vercel.app/image/animagine?prompt=${encodeURIComponent(prompt)}`;
+      const encodedPrompt = encodeURIComponent(prompt);
 
-      const { data } = await axios.get(apiUrl);
+      const apiUrl =
+        `https://christus-api.vercel.app/image/animagine?prompt=${encodedPrompt}`;
 
-      if (!data.status || !data.image_url) {
+      const { data } = await axios.get(apiUrl, { timeout: 60000 });
+
+      if (!data || !data.status || !data.image_url) {
         return sendMessage(
           senderId,
-          { text: "❌ Failed to generate image." },
+          { text: "❌ API failed to generate image." },
           pageAccessToken
         );
       }
 
-      // 🔹 Download image as buffer
-      const img = await axios.get(data.image_url, {
-        responseType: "arraybuffer"
+      const imageUrl = data.image_url;
+
+      // Télécharger l'image pour éviter blocage Meta
+      const img = await axios.get(imageUrl, {
+        responseType: "arraybuffer",
+        timeout: 60000
       });
 
-      const buffer = Buffer.from(img.data, "binary");
+      const buffer = Buffer.from(img.data);
 
-      // 🔹 Send image
       await sendMessage(
         senderId,
         {
           attachment: {
             type: "image",
-            payload: {
-              is_reusable: true
-            }
+            payload: { is_reusable: true }
           },
           filedata: buffer
         },
@@ -60,8 +63,9 @@ module.exports = {
       );
 
     } catch (error) {
-      console.error("Imagine CMD Error:", error.message);
-      sendMessage(
+      console.error("Imagine CMD Error:", error.response?.data || error.message);
+
+      await sendMessage(
         senderId,
         { text: "❌ Error generating image." },
         pageAccessToken
