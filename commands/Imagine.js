@@ -3,45 +3,31 @@ const { sendMessage } = require("../handles/sendMessage");
 
 module.exports = {
   name: "imagine",
-  description: "Generate AI image",
-  usage: "-imagine <prompt>",
-  author: "Jonathan",
+  description: "GENERATE IMAGE FROM PROMPT",
+  usage: "imagine [prompt]",
+  author: "Coffee",
 
   async execute(senderId, args, pageAccessToken) {
-
-    if (!args.length) {
-      return sendMessage(
-        senderId,
-        { text: "⚠️ Usage: -imagine <prompt>" },
-        pageAccessToken
-      );
-    }
-
-    const prompt = args.join(" ");
-    const api = `https://christus-api.vercel.app/image/animagine?prompt=${encodeURIComponent(prompt)}`;
-
     try {
+      const prompt = args.join(" ");
 
-      await sendMessage(
-        senderId,
-        { text: "🎨 Generating your AI image...\n⏳ Please wait..." },
-        pageAccessToken
-      );
-
-      const res = await axios.get(api);
-
-      // détecte plusieurs types de réponses API
-      const imageUrl =
-        res.data?.image_url ||
-        res.data?.url ||
-        res.data?.image ||
-        res.data?.data;
-
-      if (!imageUrl) {
-        console.log("API RESPONSE:", res.data);
+      if (!prompt) {
         return sendMessage(
           senderId,
-          { text: "❌ API did not return an image." },
+          { text: "⚠️ | Please provide a prompt.\nExample: imagine anime girl with blue hair" },
+          pageAccessToken
+        );
+      }
+
+      const apiUrl = `https://christus-api.vercel.app/image/animagine?prompt=${encodeURIComponent(prompt)}`;
+
+      const res = await axios.get(apiUrl);
+      const data = res.data;
+
+      if (!data.status) {
+        return sendMessage(
+          senderId,
+          { text: "❌ | Failed to generate image." },
           pageAccessToken
         );
       }
@@ -52,7 +38,7 @@ module.exports = {
           attachment: {
             type: "image",
             payload: {
-              url: imageUrl,
+              url: data.image_url,
               is_reusable: true
             }
           }
@@ -61,11 +47,10 @@ module.exports = {
       );
 
     } catch (error) {
-      console.error("AI IMAGE ERROR:", error.response?.data || error.message);
-
+      console.error("Imagine CMD Error:", error.message);
       sendMessage(
         senderId,
-        { text: "❌ Failed to generate image. API may be offline." },
+        { text: "❌ Error generating image." },
         pageAccessToken
       );
     }
