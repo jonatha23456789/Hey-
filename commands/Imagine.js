@@ -1,64 +1,56 @@
-const axios = require("axios");
-const { sendMessage } = require("../handles/sendMessage");
+const axios = require('axios');
+const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
-  name: "imagine",
-  description: "Generate image from prompt",
-  usage: "imagine <prompt>",
-  author: "Jonathan",
+  name: 'imagine',
+  description: 'GENERATE IMAGE FROM PROMPT',
+  usage: 'imagine <prompt>',
+  author: 'Jonathan',
 
   async execute(senderId, args, pageAccessToken) {
     try {
 
-      const prompt = args.join(" ").trim();
+      const prompt = args.join(' ').trim();
 
       if (!prompt) {
         return sendMessage(
           senderId,
-          { text: "⚠️ Usage: imagine <prompt>" },
+          { text: '⚠️ Usage: imagine <prompt>' },
           pageAccessToken
         );
       }
 
       await sendMessage(
         senderId,
-        { text: "🎨 Generating image..." },
+        { text: '🎨 Generating image...' },
         pageAccessToken
       );
 
       const api =
         `https://christus-api.vercel.app/image/animagine?prompt=${encodeURIComponent(prompt)}`;
 
-      const { data } = await axios.get(api, { timeout: 60000 });
+      const { data } = await axios.get(api);
 
-      if (!data || data.status !== true) {
+      if (!data?.status || !data?.image_url) {
         return sendMessage(
           senderId,
-          { text: "❌ Image generation failed." },
+          { text: '❌ Failed to generate image.' },
           pageAccessToken
         );
       }
 
       const imageUrl = data.image_url;
 
-      // 🔹 Download image
-      const img = await axios.get(imageUrl, {
-        responseType: "arraybuffer"
-      });
-
-      const buffer = Buffer.from(img.data);
-
-      // 🔹 Send image to messenger
       await sendMessage(
         senderId,
         {
           attachment: {
-            type: "image",
+            type: 'image',
             payload: {
+              url: imageUrl,
               is_reusable: true
             }
-          },
-          filedata: buffer
+          }
         },
         pageAccessToken
       );
@@ -66,13 +58,13 @@ module.exports = {
     } catch (err) {
 
       console.error(
-        "Imagine CMD Error:",
+        'Imagine CMD Error:',
         err.response?.data || err.message
       );
 
       sendMessage(
         senderId,
-        { text: "❌ Error generating image." },
+        { text: '❌ Error generating image.' },
         pageAccessToken
       );
     }
