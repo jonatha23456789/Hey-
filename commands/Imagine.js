@@ -1,4 +1,5 @@
 const axios = require('axios');
+const FormData = require('form-data');
 const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
@@ -41,16 +42,22 @@ module.exports = {
 
       const imageUrl = data.image_url;
 
+      // 🔹 Download image
+      const img = await axios.get(imageUrl, {
+        responseType: 'arraybuffer'
+      });
+
+      const buffer = Buffer.from(img.data, 'binary');
+
+      // 🔹 Send image buffer
       await sendMessage(
         senderId,
         {
           attachment: {
             type: 'image',
-            payload: {
-              url: imageUrl,
-              is_reusable: true
-            }
-          }
+            payload: {}
+          },
+          filedata: buffer
         },
         pageAccessToken
       );
