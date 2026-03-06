@@ -1,6 +1,5 @@
 const axios = require("axios");
 const FormData = require("form-data");
-const { sendMessage } = require("../handles/sendMessage");
 
 module.exports = {
   name: "imagine",
@@ -13,18 +12,8 @@ module.exports = {
 
       const prompt = args.join(" ");
       if (!prompt) {
-        return sendMessage(
-          senderId,
-          { text: "⚠️ Usage: -imagine <prompt>" },
-          pageAccessToken
-        );
+        return;
       }
-
-      await sendMessage(
-        senderId,
-        { text: "🎨 Generating image..." },
-        pageAccessToken
-      );
 
       const api =
         `https://christus-api.vercel.app/image/animagine?prompt=${encodeURIComponent(prompt)}`;
@@ -37,12 +26,19 @@ module.exports = {
 
       const imageUrl = data.image_url;
 
-      // 📥 Download image
+      // download image
       const img = await axios.get(imageUrl, {
         responseType: "arraybuffer"
       });
 
       const form = new FormData();
+
+      form.append(
+        "recipient",
+        JSON.stringify({
+          id: senderId
+        })
+      );
 
       form.append(
         "message",
@@ -63,16 +59,9 @@ module.exports = {
       );
 
     } catch (err) {
-
       console.error(
         "Imagine CMD Error:",
         err.response?.data || err.message
-      );
-
-      sendMessage(
-        senderId,
-        { text: "❌ Error generating image." },
-        pageAccessToken
       );
     }
   }
