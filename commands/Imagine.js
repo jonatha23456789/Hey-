@@ -4,16 +4,25 @@ const FormData = require("form-data");
 module.exports = {
   name: "imagine",
   description: "Generate image from prompt",
-  usage: "-imagine <prompt>",
+  usage: "-imagine <prompt> [1:1 | 16:9 | 9:16]",
   author: "Jonathan",
 
   async execute(senderId, args, pageAccessToken) {
     try {
 
-      const prompt = args.join(" ");
-      if (!prompt) {
-        return;
+      if (!args.length) return;
+
+      // detect ratio
+      let ratio = "1:1";
+      const lastArg = args[args.length - 1];
+
+      if (["1:1", "16:9", "9:16"].includes(lastArg)) {
+        ratio = lastArg;
+        args.pop();
       }
+
+      const prompt = args.join(" ");
+      if (!prompt) return;
 
       const api =
         `https://christus-api.vercel.app/image/animagine?prompt=${encodeURIComponent(prompt)}`;
@@ -21,7 +30,7 @@ module.exports = {
       const { data } = await axios.get(api);
 
       if (!data.status || !data.image_url) {
-        throw new Error("API failed");
+        throw new Error("API error");
       }
 
       const imageUrl = data.image_url;
@@ -35,9 +44,7 @@ module.exports = {
 
       form.append(
         "recipient",
-        JSON.stringify({
-          id: senderId
-        })
+        JSON.stringify({ id: senderId })
       );
 
       form.append(
