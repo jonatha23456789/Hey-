@@ -1,82 +1,92 @@
-const axios = require('axios');
-const { sendMessage } = require('../handles/sendMessage');
+const axios = require("axios");
+const { sendMessage } = require("../handles/sendMessage");
 
-// Mémoire des choix par utilisateur
+// mémoire des résultats
 global.videoChoice = global.videoChoice || {};
 
 module.exports = {
-  name: 'video',
-  description: 'Search YouTube videos and select by reply number',
-  usage: '-video <name>',
-  author: 'coffee',
+  name: "video",
+  description: "Search YouTube videos and select by reply number",
+  usage: "-video <name>",
+  author: "coffee",
 
   async execute(senderId, args, pageAccessToken) {
+
     if (!args.length) {
       return sendMessage(
         senderId,
-        { text: '❌ Please provide a video name.' },
+        { text: "❌ Please provide a video name." },
         pageAccessToken
       );
     }
 
-    const query = args.join(' ');
+    const query = args.join(" ");
 
     try {
-      // 🔍 NOUVELLE API
-      const res = await axios.get(
-        'https://api.nekolabs.web.id/dsc/youtube/search',
-        { params: { q: query } }
-      );
 
-      const videos = res.data?.result?.slice(0, 5);
+      const api =
+        `https://christus-api.vercel.app/search/youtubeSearch?q=${encodeURIComponent(query)}&count=5`;
 
-      if (!videos || videos.length === 0) {
+      const { data } = await axios.get(api);
+
+      const videos = data?.result;
+
+      if (!data.status || !videos || videos.length === 0) {
         return sendMessage(
           senderId,
-          { text: '❌ No videos found.' },
+          { text: "❌ No videos found." },
           pageAccessToken
         );
       }
 
-      // Sauvegarde pour le reply
+      // sauvegarde pour reply
       global.videoChoice[senderId] = videos;
 
       const list = videos
         .map(
           (v, i) =>
-            `${i + 1}. 🎬 ${v.title}\n   ⏱ ${v.duration} | 📺 ${v.channel}`
+`${i + 1}. 🎬 ${v.title}
+   ⏱ ${v.timestamp}
+   📺 ${v.author}
+   👀 ${v.views.toLocaleString()} views`
         )
-        .join('\n\n');
+        .join("\n\n");
 
       await sendMessage(
         senderId,
         {
           text:
-`🎥 **Videos found**
+`🎥 Videos Found
 
 ${list}
 
-🔁 Reply with the number (1-${videos.length})`
+🔁 Reply with a number (1-${videos.length})`
         },
         pageAccessToken
       );
 
     } catch (err) {
-      console.error('Video search error:', err.message);
+
+      console.error(
+        "Video Search Error:",
+        err.response?.data || err.message
+      );
+
       sendMessage(
         senderId,
-        { text: '❌ Error fetching videos.' },
+        { text: "❌ Error fetching videos." },
         pageAccessToken
       );
     }
   },
 
-  // 🔁 Gestion du reply avec numéro
+  // gestion du reply
   async handleChoice(senderId, messageText, pageAccessToken) {
+
     const videos = global.videoChoice[senderId];
     if (!videos) return false;
 
-    const index = parseInt(messageText.trim(), 10) - 1;
+    const index = parseInt(messageText.trim()) - 1;
 
     if (isNaN(index) || index < 0 || index >= videos.length) {
       return false;
@@ -89,17 +99,32 @@ ${list}
       senderId,
       {
         text:
-`✅ **Video selected**
+`✅ Video Selected
 
 🎬 Title: ${video.title}
-📺 Channel: ${video.channel}
-⏱ Duration: ${video.duration}
+📺 Channel: ${video.author}
+⏱ Duration: ${video.timestamp}
+👀 Views: ${video.views.toLocaleString()}
 
-🔗 Watch / Download:
+🔗 Watch:
 ${video.url}`
       },
       pageAccessToken
     );
+
+    // thumbnail preview
+    if (video.thumbnail) {
+      await sendMessage(
+        senderId,
+        {
+          attachment: {
+            type: "image",
+            payload: { url: video.thumbnail }
+          }
+        },
+        pageAccessToken
+      );
+    }
 
     return true;
   }
