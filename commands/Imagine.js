@@ -3,12 +3,13 @@ const { sendMessage } = require("../handles/sendMessage");
 
 module.exports = {
   name: "imagine",
-  description: "GENERATE IMAGE FROM PROMPT",
+  description: "Generate image from prompt",
   usage: "imagine <prompt>",
   author: "Jonathan",
 
   async execute(senderId, args, pageAccessToken) {
     try {
+
       const prompt = args.join(" ").trim();
 
       if (!prompt) {
@@ -21,51 +22,51 @@ module.exports = {
 
       await sendMessage(
         senderId,
-        { text: "🎨 Generating image, please wait..." },
+        { text: "🎨 Generating image..." },
         pageAccessToken
       );
 
-      const encodedPrompt = encodeURIComponent(prompt);
+      const api =
+        `https://christus-api.vercel.app/image/animagine?prompt=${encodeURIComponent(prompt)}`;
 
-      const apiUrl =
-        `https://christus-api.vercel.app/image/animagine?prompt=${encodedPrompt}`;
+      const { data } = await axios.get(api, { timeout: 60000 });
 
-      const { data } = await axios.get(apiUrl, { timeout: 60000 });
+      console.log("Imagine API:", data);
 
-      if (!data || !data.status || !data.image_url) {
+      // ❌ API error
+      if (!data || data.status !== true) {
         return sendMessage(
           senderId,
-          { text: "❌ API failed to generate image." },
+          { text: "❌ Image generation failed. Try another prompt." },
           pageAccessToken
         );
       }
 
       const imageUrl = data.image_url;
 
-      // Télécharger l'image pour éviter blocage Meta
-      const img = await axios.get(imageUrl, {
-        responseType: "arraybuffer",
-        timeout: 60000
-      });
-
-      const buffer = Buffer.from(img.data);
-
+      // 🖼 send image
       await sendMessage(
         senderId,
         {
           attachment: {
             type: "image",
-            payload: { is_reusable: true }
-          },
-          filedata: buffer
+            payload: {
+              url: imageUrl,
+              is_reusable: true
+            }
+          }
         },
         pageAccessToken
       );
 
-    } catch (error) {
-      console.error("Imagine CMD Error:", error.response?.data || error.message);
+    } catch (err) {
 
-      await sendMessage(
+      console.error(
+        "Imagine CMD Error:",
+        err.response?.data || err.message
+      );
+
+      sendMessage(
         senderId,
         { text: "❌ Error generating image." },
         pageAccessToken
