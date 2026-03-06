@@ -1,72 +1,92 @@
-const axios = require('axios');
-const { sendMessage } = require('../handles/sendMessage');
+const axios = require("axios");
+const { sendMessage } = require("../handles/sendMessage");
 
 module.exports = {
-  name: 'search',
-  description: 'Generate WANTED posters for multiple users',
-  usage: '-wantedposter <uid> <name> <reward> ; <uid2> <name2> <reward2> ...',
-  author: 'Jonathan',
+  name: "search",
+  description: "Generate WANTED posters",
+  usage: "-wantedposter <uid> <name> <reward>",
+  author: "Jonathan",
 
   async execute(senderId, args, pageAccessToken) {
-    if (!args.length) {
+
+    if (args.length < 3) {
       return sendMessage(
         senderId,
-        { text: '⚠️ Usage:\n-wantedposter <uid> <name> <reward> ; <uid2> <name2> <reward2> ...' },
+        {
+          text:
+`⚠️ Usage:
+-wantedposter <uid> <name> <reward>
+
+Example:
+-wantedposter 1000923456 Luffy 500000000`
+        },
         pageAccessToken
       );
     }
 
-    const input = args.join(' ').split(';').map(item => item.trim()).filter(Boolean);
+    const uid = args[0];
+    const reward = args[args.length - 1];
+    const name = args.slice(1, -1).join(" ");
 
-    for (const entry of input) {
-      const parts = entry.split(' ').filter(Boolean);
-      if (parts.length < 3) continue;
+    const api =
+`https://betadash-api-swordslush-production.up.railway.app/wanted-poster?userid=${encodeURIComponent(uid)}&name=${encodeURIComponent(name)}&reward=${encodeURIComponent(reward)}`;
 
-      const [uid, name, reward] = parts;
+    try {
 
-      const apiUrl = `https://betadash-api-swordslush-production.up.railway.app/wanted-poster?userid=${encodeURIComponent(uid)}&name=${encodeURIComponent(name)}&reward=${encodeURIComponent(reward)}`;
+      await sendMessage(
+        senderId,
+        { text: "🎨 Generating WANTED poster..." },
+        pageAccessToken
+      );
 
-      try {
-        const { data } = await axios.get(apiUrl, { timeout: 30000 });
+      const { data } = await axios.get(api, { timeout: 60000 });
 
-        if (!data?.results?.url) {
-          await sendMessage(
-            senderId,
-            { text: `❌ Failed to generate WANTED poster for ${name}.` },
-            pageAccessToken
-          );
-          continue;
-        }
+      const imageUrl = data?.results?.url;
 
-        const imageUrl = data.results.url;
-
-        // 🔹 Send image
-        await sendMessage(
+      if (!imageUrl) {
+        return sendMessage(
           senderId,
-          {
-            attachment: {
-              type: 'image',
-              payload: { url: imageUrl, is_reusable: true },
-            },
-          },
-          pageAccessToken
-        );
-
-        // 🔹 Confirmation message
-        await sendMessage(
-          senderId,
-          { text: `🎯 WANTED Poster created for ${name} with reward ${reward}!` },
-          pageAccessToken
-        );
-
-      } catch (err) {
-        console.error(`WantedPoster Error (${name}):`, err.message || err);
-        await sendMessage(
-          senderId,
-          { text: `🚨 Error generating WANTED poster for ${name}.` },
+          { text: "❌ API failed to generate poster." },
           pageAccessToken
         );
       }
+
+      await sendMessage(
+        senderId,
+        {
+          attachment: {
+            type: "image",
+            payload: { url: imageUrl }
+          }
+        },
+        pageAccessToken
+      );
+
+      await sendMessage(
+        senderId,
+        {
+          text:
+`🏴‍☠️ WANTED POSTER
+
+👤 Name: ${name}
+💰 Reward: ${reward}
+🆔 UID: ${uid}`
+        },
+        pageAccessToken
+      );
+
+    } catch (err) {
+
+      console.error(
+        "WantedPoster Error:",
+        err.response?.data || err.message
+      );
+
+      await sendMessage(
+        senderId,
+        { text: "❌ Error generating WANTED poster." },
+        pageAccessToken
+      );
     }
-  },
+  }
 };
