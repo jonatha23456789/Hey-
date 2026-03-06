@@ -31,30 +31,34 @@ module.exports = {
 
       const { data } = await axios.get(api, { timeout: 60000 });
 
-      console.log("Imagine API:", data);
-
-      // ❌ API error
       if (!data || data.status !== true) {
         return sendMessage(
           senderId,
-          { text: "❌ Image generation failed. Try another prompt." },
+          { text: "❌ Image generation failed." },
           pageAccessToken
         );
       }
 
       const imageUrl = data.image_url;
 
-      // 🖼 send image
+      // 🔹 Download image
+      const img = await axios.get(imageUrl, {
+        responseType: "arraybuffer"
+      });
+
+      const buffer = Buffer.from(img.data);
+
+      // 🔹 Send image to messenger
       await sendMessage(
         senderId,
         {
           attachment: {
             type: "image",
             payload: {
-              url: imageUrl,
               is_reusable: true
             }
-          }
+          },
+          filedata: buffer
         },
         pageAccessToken
       );
