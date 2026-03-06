@@ -1,29 +1,28 @@
-const axios = require('axios');
-const FormData = require('form-data');
-const { sendMessage } = require('../handles/sendMessage');
+const axios = require("axios");
+const FormData = require("form-data");
+const { sendMessage } = require("../handles/sendMessage");
 
 module.exports = {
-  name: 'imagine',
-  description: 'GENERATE IMAGE FROM PROMPT',
-  usage: 'imagine <prompt>',
-  author: 'Jonathan',
+  name: "imagine",
+  description: "Generate image from prompt",
+  usage: "-imagine <prompt>",
+  author: "Jonathan",
 
   async execute(senderId, args, pageAccessToken) {
     try {
 
-      const prompt = args.join(' ').trim();
-
+      const prompt = args.join(" ");
       if (!prompt) {
         return sendMessage(
           senderId,
-          { text: '⚠️ Usage: imagine <prompt>' },
+          { text: "⚠️ Usage: -imagine <prompt>" },
           pageAccessToken
         );
       }
 
       await sendMessage(
         senderId,
-        { text: '🎨 Generating image...' },
+        { text: "🎨 Generating image..." },
         pageAccessToken
       );
 
@@ -32,46 +31,47 @@ module.exports = {
 
       const { data } = await axios.get(api);
 
-      if (!data?.status || !data?.image_url) {
-        return sendMessage(
-          senderId,
-          { text: '❌ Failed to generate image.' },
-          pageAccessToken
-        );
+      if (!data.status || !data.image_url) {
+        throw new Error("API failed");
       }
 
       const imageUrl = data.image_url;
 
-      // 🔹 Download image
+      // 📥 Download image
       const img = await axios.get(imageUrl, {
-        responseType: 'arraybuffer'
+        responseType: "arraybuffer"
       });
 
-      const buffer = Buffer.from(img.data, 'binary');
+      const form = new FormData();
 
-      // 🔹 Send image buffer
-      await sendMessage(
-        senderId,
-        {
+      form.append(
+        "message",
+        JSON.stringify({
           attachment: {
-            type: 'image',
+            type: "image",
             payload: {}
-          },
-          filedata: buffer
-        },
-        pageAccessToken
+          }
+        })
+      );
+
+      form.append("filedata", Buffer.from(img.data), "ai.png");
+
+      await axios.post(
+        `https://graph.facebook.com/v19.0/me/messages?access_token=${pageAccessToken}`,
+        form,
+        { headers: form.getHeaders() }
       );
 
     } catch (err) {
 
       console.error(
-        'Imagine CMD Error:',
+        "Imagine CMD Error:",
         err.response?.data || err.message
       );
 
       sendMessage(
         senderId,
-        { text: '❌ Error generating image.' },
+        { text: "❌ Error generating image." },
         pageAccessToken
       );
     }
