@@ -3,7 +3,7 @@ const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
   name: 'autoalldl',
-  description: 'Detect and auto-download Facebook videos from shared links',
+  description: 'Auto download videos from links (multi API)',
   author: 'coffee',
 
   async execute(senderId, args, pageAccessToken, event) {
@@ -17,46 +17,74 @@ module.exports = {
 
       const videoUrl = urlMatch[0];
 
-      // 🔹 NEW API
-      const apiUrl = `https://xnil6x-api-7io2.onrender.com/download/alldl?url=${encodeURIComponent(videoUrl)}`;
+      let videoDirectUrl = null;
+      let title = "Video";
+      let thumbnail = null;
 
-      const { data } = await axios.get(apiUrl, { timeout: 30000 });
+      // =========================
+      // 🔥 API 1 (xnil6x)
+      // =========================
+      try {
+        const api1 = `https://xnil6x-api-7io2.onrender.com/download/alldl?url=${encodeURIComponent(videoUrl)}`;
+        const { data } = await axios.get(api1, { timeout: 20000 });
 
-      if (!data?.success || !data?.data?.status) {
-        return sendMessage(
-          senderId,
-          { text: '❌ Failed to fetch video data.' },
-          pageAccessToken
-        );
+        if (data?.success && data?.data?.status) {
+          videoDirectUrl = data.data.url;
+          title = data.data.title || title;
+          thumbnail = data.data.thumbnail;
+        }
+      } catch (e) {
+        console.log("API 1 failed, switching...");
       }
 
-      const videoData = data.data;
-      const title = videoData.title || 'Facebook Video';
-      const videoDirectUrl = videoData.url;
-      const thumbnail = videoData.thumbnail;
+      // =========================
+      // 🔥 API 2 (smfahim)
+      // =========================
+      if (!videoDirectUrl) {
+        try {
+          const api2 = `https://smfahim.xyz/download/all/v14?url=${encodeURIComponent(videoUrl)}`;
+          const { data } = await axios.get(api2, { timeout: 20000 });
 
+          if (data?.success && data?.result) {
+            title = data.result.title || title;
+            thumbnail = data.result.imageUrl;
+
+            // 🔹 prendre meilleure qualité mp4
+            const medias = data.result.medias || [];
+
+            const video = medias.find(m => m.format?.includes('mp4'));
+
+            if (video) {
+              videoDirectUrl = video.url;
+            }
+          }
+        } catch (e) {
+          console.log("API 2 failed");
+        }
+      }
+
+      // ❌ si aucune API marche
       if (!videoDirectUrl) {
         return sendMessage(
           senderId,
-          { text: '❌ No downloadable video found.' },
+          { text: '❌ Failed to download video from all APIs.' },
           pageAccessToken
         );
       }
 
-      // 🔹 Info Message
+      // =========================
+      // ✅ ENVOI
+      // =========================
+
       await sendMessage(
         senderId,
         {
-          text:
-`✅ Facebook Video Detected
-🎞 Title: ${title}
-📡 Platform: ${data.platform || 'Facebook'}
-⬇ Sending video...`
+          text: `✅ Video Detected\n🎞 Title: ${title}\n⬇ Sending video...`
         },
         pageAccessToken
       );
 
-      // 🔹 Thumbnail (optional preview)
+      // thumbnail
       if (thumbnail) {
         await sendMessage(
           senderId,
@@ -73,7 +101,7 @@ module.exports = {
         );
       }
 
-      // 🔹 Send Video
+      // video
       await sendMessage(
         senderId,
         {
