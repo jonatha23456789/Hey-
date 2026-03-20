@@ -11,7 +11,7 @@ function splitMessage(text, maxLength = 1900) {
 }
 
 module.exports = {
-  name: ['gpt'],
+  name: ['gemini'],
   description: 'Chat with Gemini AI + image analysis',
   usage: '-gpt <question> (or reply to image)',
   author: 'Jonathan',
@@ -47,7 +47,7 @@ module.exports = {
       // ⏳ message loading
       await sendMessage(
         senderId,
-        { text: '⏳ Thinking...' },
+        { text: '' },
         pageAccessToken
       );
 
