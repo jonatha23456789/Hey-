@@ -2,7 +2,7 @@ const axios = require("axios");
 const FormData = require("form-data");
 
 module.exports = {
-  name: "imagine",
+  name: "mj",
   description: "Generate image from prompt",
   usage: "-imagine <prompt>",
   author: "Jonathan",
