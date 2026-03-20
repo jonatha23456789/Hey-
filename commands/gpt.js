@@ -1,7 +1,7 @@
 const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
 
-// Découpe texte si trop long (limite Messenger)
+// 🔹 découpe message
 function splitMessage(text, maxLength = 1900) {
   const chunks = [];
   for (let i = 0; i < text.length; i += maxLength) {
@@ -12,48 +12,71 @@ function splitMessage(text, maxLength = 1900) {
 
 module.exports = {
   name: ['gpt'],
-  description: 'Chat with ChatGPT (Kohi API)',
-  usage: '-gpt <question>',
-  author: 'kelvin',
+  description: 'Chat with Gemini AI + image analysis',
+  usage: '-gpt <question> (or reply to image)',
+  author: 'Jonathan',
 
-  async execute(senderId, args, pageAccessToken) {
-    const prompt = args.join(' ').trim();
-
-    if (!prompt) {
-      return sendMessage(
-        senderId,
-        { text: '⚠️ Usage: -gpt <your question>' },
-        pageAccessToken
-      );
-    }
-
-    // ⏳ feedback optionnel
-    await sendMessage(senderId, { text: '' }, pageAccessToken);
-
-    const apiUrl = 'https://api-library-kohi.onrender.com/api/chatgpt';
-
+  async execute(senderId, args, pageAccessToken, event) {
     try {
-      const { data } = await axios.get(apiUrl, {
-        params: {
-          prompt,
-          user: senderId
-        }
-      });
+      let prompt = args.join(' ').trim();
+      let imgUrl = '';
 
-      if (!data?.status || !data?.data) {
+      // 🔥 DETECT IMAGE REPLY
+      if (event?.message?.reply_to?.attachments) {
+        const att = event.message.reply_to.attachments[0];
+
+        if (att.type === "image") {
+          imgUrl = att.payload.url;
+
+          // si pas de texte → description auto
+          if (!prompt) {
+            prompt = "Describe this image in detail";
+          }
+        }
+      }
+
+      // si aucun prompt + aucune image
+      if (!prompt) {
         return sendMessage(
           senderId,
-          { text: '❌ No response from GPT API.' },
+          { text: '⚠️ Usage: -gpt <question> ou reply à une image' },
+          pageAccessToken
+        );
+      }
+
+      // ⏳ message loading
+      await sendMessage(
+        senderId,
+        { text: '⏳ Thinking...' },
+        pageAccessToken
+      );
+
+      // 🔥 API
+      const apiUrl = `https://smfahim.xyz/ai/gemini/v1?prompt=${encodeURIComponent(prompt)}&imgUrl=${encodeURIComponent(imgUrl)}`;
+
+      const { data } = await axios.get(apiUrl, { timeout: 30000 });
+
+      // 🔥 extraction texte
+      const replyText =
+        data?.candidates?.[0]?.content?.parts
+          ?.map(p => p.text)
+          .join(' ');
+
+      if (!replyText) {
+        return sendMessage(
+          senderId,
+          { text: '❌ No response from AI.' },
           pageAccessToken
         );
       }
 
       const deco = '・───── >ᴗ< ─────・';
+
       const reply =
 `${deco}
-💬 | GPT
+🤖 | GEMINI AI
 
-${data.data}
+${replyText.trim()}
 
 ${deco}`;
 
@@ -68,10 +91,11 @@ ${deco}`;
       }
 
     } catch (error) {
-      console.error('GPT Command Error:', error.message || error);
+      console.error('GPT Command Error:', error.response?.data || error.message);
+
       await sendMessage(
         senderId,
-        { text: '🚨 Error while contacting GPT API.' },
+        { text: '🚨 Error while contacting AI API.' },
         pageAccessToken
       );
     }
