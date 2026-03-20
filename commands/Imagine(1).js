@@ -9,24 +9,21 @@ module.exports = {
 
   async execute(senderId, args, pageAccessToken) {
     try {
-
       const prompt = args.join(" ");
-      if (!prompt) {
-        return;
-      }
+      if (!prompt) return;
 
-      const api =
-        `https://christus-api.vercel.app/image/animagine?prompt=${encodeURIComponent(prompt)}`;
+      // 🔥 NEW API
+      const api = `https://smfahim.xyz/ai/mj/v1?prompt=${encodeURIComponent(prompt)}`;
 
-      const { data } = await axios.get(api);
+      const { data } = await axios.get(api, { timeout: 30000 });
 
-      if (!data.status || !data.image_url) {
+      if (!data?.success || !data?.imageUrl) {
         throw new Error("API failed");
       }
 
-      const imageUrl = data.image_url;
+      const imageUrl = data.imageUrl;
 
-      // download image
+      // 🔹 download image
       const img = await axios.get(imageUrl, {
         responseType: "arraybuffer"
       });
@@ -50,7 +47,7 @@ module.exports = {
         })
       );
 
-      form.append("filedata", Buffer.from(img.data), "ai.png");
+      form.append("filedata", Buffer.from(img.data), "ai.webp");
 
       await axios.post(
         `https://graph.facebook.com/v19.0/me/messages?access_token=${pageAccessToken}`,
