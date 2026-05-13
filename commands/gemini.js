@@ -1,71 +1,83 @@
 const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
 
-// 🔹 découpe message
+// 🔹 découpe message Messenger
 function splitMessage(text, maxLength = 1900) {
   const chunks = [];
+
   for (let i = 0; i < text.length; i += maxLength) {
     chunks.push(text.slice(i, i + maxLength));
   }
+
   return chunks;
 }
 
 module.exports = {
   name: ['gemini'],
-  description: 'Chat with Gemini AI + image analysis',
-  usage: '-gpt <question> (or reply to image)',
+  description: 'Gemini AI with image analysis',
+  usage: '-gemini <question> or reply to image',
   author: 'Jonathan',
 
   async execute(senderId, args, pageAccessToken, event) {
     try {
+
       let prompt = args.join(' ').trim();
       let imgUrl = '';
 
-      // 🔥 DETECT IMAGE REPLY
+      // 🔥 detect image reply
       if (event?.message?.reply_to?.attachments) {
+
         const att = event.message.reply_to.attachments[0];
 
-        if (att.type === "image") {
+        if (att.type === 'image') {
+
           imgUrl = att.payload.url;
 
-          // si pas de texte → description auto
+          // auto describe image
           if (!prompt) {
-            prompt = "Describe this image in detail";
+            prompt = 'Describe this image in detail';
           }
         }
       }
 
-      // si aucun prompt + aucune image
+      // ❌ no prompt
       if (!prompt) {
         return sendMessage(
           senderId,
-          { text: '⚠️ Usage: -gpt <question> ou reply à une image' },
+          {
+            text: '⚠️ Usage: -gemini <question> or reply to an image'
+          },
           pageAccessToken
         );
       }
 
-      // ⏳ message loading
+      // ⏳ loading
       await sendMessage(
         senderId,
-        { text: '' },
+        {
+          text: '⏳ Thinking...'
+        },
         pageAccessToken
       );
 
-      // 🔥 API
-      const apiUrl = `https://smfahim.xyz/ai/gemini/v1?prompt=${encodeURIComponent(prompt)}&imgUrl=${encodeURIComponent(imgUrl)}`;
+      // 🔥 NEW API
+      const apiUrl =
+        `https://norch-project.gleeze.com/api/gemini/2.5/flash-lite?prompt=${encodeURIComponent(prompt)}&imageurl=${encodeURIComponent(imgUrl)}`;
 
-      const { data } = await axios.get(apiUrl, { timeout: 30000 });
+      const { data } = await axios.get(apiUrl, {
+        timeout: 60000
+      });
 
-      // 🔥 extraction texte
-      const replyText =
-        data?.candidates?.[0]?.content?.parts
-          ?.map(p => p.text)
-          .join(' ');
+      // 🔥 response extraction
+      const replyText = data?.response;
 
       if (!replyText) {
+
         return sendMessage(
           senderId,
-          { text: '❌ No response from AI.' },
+          {
+            text: '❌ No response from Gemini API.'
+          },
           pageAccessToken
         );
       }
@@ -74,28 +86,38 @@ module.exports = {
 
       const reply =
 `${deco}
-🤖 | GEMINI AI
+🤖 | GEMINI 2.5 FLASH
 
 ${replyText.trim()}
 
 ${deco}`;
 
+      // 🔹 split long messages
       const chunks = splitMessage(reply);
 
       for (const chunk of chunks) {
+
         await sendMessage(
           senderId,
-          { text: chunk },
+          {
+            text: chunk
+          },
           pageAccessToken
         );
       }
 
     } catch (error) {
-      console.error('GPT Command Error:', error.response?.data || error.message);
+
+      console.error(
+        'Gemini CMD Error:',
+        error.response?.data || error.message
+      );
 
       await sendMessage(
         senderId,
-        { text: '🚨 Error while contacting AI API.' },
+        {
+          text: '🚨 Error while contacting Gemini API.'
+        },
         pageAccessToken
       );
     }
