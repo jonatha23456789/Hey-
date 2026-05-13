@@ -3,62 +3,104 @@ const FormData = require("form-data");
 
 module.exports = {
   name: "mj",
-  description: "Generate image from prompt",
-  usage: "-imagine <prompt>",
+  description: "Generate Midjourney style images",
+  usage: "-mj <prompt>",
   author: "Jonathan",
 
   async execute(senderId, args, pageAccessToken) {
     try {
-      const prompt = args.join(" ");
+      const prompt = args.join(" ").trim();
+
       if (!prompt) return;
 
+      // ⏳ loading message
+      await axios.post(
+        `https://graph.facebook.com/v19.0/me/messages?access_token=${pageAccessToken}`,
+        {
+          recipient: { id: senderId },
+          message: {
+            text: `🎨 Generating images...\n🧠 Prompt: ${prompt}`
+          }
+        }
+      );
+
       // 🔥 NEW API
-      const api = `https://smfahim.xyz/ai/mj/v1?prompt=${encodeURIComponent(prompt)}`;
+      const api = `https://azadx69x-all-apis-top.vercel.app/api/mj?prompt=${encodeURIComponent(prompt)}`;
 
-      const { data } = await axios.get(api, { timeout: 30000 });
+      const { data } = await axios.get(api, {
+        timeout: 60000
+      });
 
-      if (!data?.success || !data?.imageUrl) {
+      // 🔥 validation
+      if (
+        !data?.success ||
+        !data?.data?.images ||
+        !Array.isArray(data.data.images)
+      ) {
         throw new Error("API failed");
       }
 
-      const imageUrl = data.imageUrl;
+      const images = data.data.images.slice(0, 4);
 
-      // 🔹 download image
-      const img = await axios.get(imageUrl, {
-        responseType: "arraybuffer"
-      });
+      // 🔥 send all images
+      for (let i = 0; i < images.length; i++) {
+        const imageUrl = images[i];
 
-      const form = new FormData();
+        // download image
+        const img = await axios.get(imageUrl, {
+          responseType: "arraybuffer"
+        });
 
-      form.append(
-        "recipient",
-        JSON.stringify({
-          id: senderId
-        })
-      );
+        const form = new FormData();
 
-      form.append(
-        "message",
-        JSON.stringify({
-          attachment: {
-            type: "image",
-            payload: {}
+        form.append(
+          "recipient",
+          JSON.stringify({
+            id: senderId
+          })
+        );
+
+        form.append(
+          "message",
+          JSON.stringify({
+            attachment: {
+              type: "image",
+              payload: {}
+            }
+          })
+        );
+
+        form.append(
+          "filedata",
+          Buffer.from(img.data),
+          `mj_${i + 1}.png`
+        );
+
+        // send image
+        await axios.post(
+          `https://graph.facebook.com/v19.0/me/messages?access_token=${pageAccessToken}`,
+          form,
+          {
+            headers: form.getHeaders()
           }
-        })
-      );
-
-      form.append("filedata", Buffer.from(img.data), "ai.webp");
-
-      await axios.post(
-        `https://graph.facebook.com/v19.0/me/messages?access_token=${pageAccessToken}`,
-        form,
-        { headers: form.getHeaders() }
-      );
+        );
+      }
 
     } catch (err) {
       console.error(
-        "Imagine CMD Error:",
+        "MJ CMD Error:",
         err.response?.data || err.message
+      );
+
+      // ❌ error message
+      await axios.post(
+        `https://graph.facebook.com/v19.0/me/messages?access_token=${pageAccessToken}`,
+        {
+          recipient: { id: senderId },
+          message: {
+            text: "🚨 Error generating images."
+          }
+        }
       );
     }
   }
