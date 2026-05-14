@@ -73,7 +73,11 @@ function buildContext(senderId, question) {
 function saveMemory(senderId, q, a) {
   const hist = memory.get(senderId) || [];
   hist.push({ q, a });
-  if (hist.length > MAX_MEMORY) hist.shift();
+
+  if (hist.length > MAX_MEMORY) {
+    hist.shift();
+  }
+
   memory.set(senderId, hist);
 }
 
@@ -88,9 +92,14 @@ module.exports = {
       if (senderId !== OWNER_ID) return;
 
       global.aiEnabled = args[0] === 'on';
+
       return sendMessage(
         senderId,
-        { text: global.aiEnabled ? '✅ AI ENABLED' : '🚫 AI DISABLED' },
+        {
+          text: global.aiEnabled
+            ? '✅ AI ENABLED'
+            : '🚫 AI DISABLED'
+        },
         pageAccessToken
       );
     }
@@ -100,18 +109,24 @@ module.exports = {
       if (senderId !== OWNER_ID) return;
 
       const model = args[1]?.toLowerCase();
+
       if (!['copilot', 'gemini'].includes(model)) {
         return sendMessage(
           senderId,
-          { text: '⚠️ Usage: ai switch copilot | gemini' },
+          {
+            text: '⚠️ Usage: ai switch copilot | gemini'
+          },
           pageAccessToken
         );
       }
 
       global.aiModel = model;
+
       return sendMessage(
         senderId,
-        { text: `🔄 AI switched to ${model.toUpperCase()}` },
+        {
+          text: `🔄 AI switched to ${model.toUpperCase()}`
+        },
         pageAccessToken
       );
     }
@@ -120,7 +135,9 @@ module.exports = {
     if (!global.aiEnabled && senderId !== OWNER_ID) {
       return sendMessage(
         senderId,
-        { text: '🚫 AI disabled by owner.' },
+        {
+          text: '🚫 AI disabled by owner.'
+        },
         pageAccessToken
       );
     }
@@ -128,48 +145,77 @@ module.exports = {
     /* ===== RESET MEMORY ===== */
     if (args[0] === 'reset') {
       memory.delete(senderId);
-      return sendMessage(senderId, { text: '🧠 Memory cleared.' }, pageAccessToken);
+
+      return sendMessage(
+        senderId,
+        {
+          text: '🧠 Memory cleared.'
+        },
+        pageAccessToken
+      );
     }
 
     const question = args.join(' ').trim();
-    if (!question) {
-      return sendMessage(senderId, { text: '⚠️ Usage: ai <question>' }, pageAccessToken);
+
+    // 🔥 image only support
+    const imageUrl = await getReplyImage(event, pageAccessToken);
+
+    if (!question && !imageUrl) {
+      return sendMessage(
+        senderId,
+        {
+          text: '⚠️ Usage: ai <question> or reply to image'
+        },
+        pageAccessToken
+      );
     }
 
     try {
-      const imageUrl = await getReplyImage(event, pageAccessToken);
-      const prompt = buildContext(senderId, question);
+
+      // 🔥 auto prompt for image
+      let finalQuestion = question;
+
+      if (!finalQuestion && imageUrl) {
+        finalQuestion = 'Describe this image in detail';
+      }
+
+      const prompt = buildContext(senderId, finalQuestion);
 
       let response;
       let usedModel = global.aiModel;
 
-      /* ===== COPILOT (RYNEKOO) ===== */
+      /* ===== COPILOT API ===== */
       if (global.aiModel === 'copilot') {
-        try {
-          const { data } = await axios.get(
-            'https://rynekoo-api.hf.space/text.gen/copilot',
-            { params: { text: prompt } }
-          );
 
-          if (data?.success && data?.result?.text) {
-            response = data.result.text.trim();
+        try {
+
+          const api =
+            `https://christus-api.vercel.app/ai/copilot?message=${encodeURIComponent(prompt)}&model=think-deeper`;
+
+          const { data } = await axios.get(api, {
+            timeout: 60000
+          });
+
+          if (data?.answer) {
+            response = data.answer.trim();
           }
-        } catch {}
+
+        } catch (e) {
+          console.log('Copilot failed -> switching Gemini');
+        }
       }
 
-      /* ===== GEMINI (NORCH FLASH-LITE) ===== */
+      /* ===== GEMINI FALLBACK ===== */
       if (!response) {
+
         usedModel = 'gemini';
 
-        const { data } = await axios.get(
-          'https://norch-project.gleeze.com/api/gemini/2.5/flash-lite',
-          {
-            params: {
-              prompt: prompt,
-              imageurl: imageUrl || undefined
-            }
-          }
-        );
+        const api =
+          `https://norch-project.gleeze.com/api/gemini/2.5/flash-lite?prompt=${encodeURIComponent(finalQuestion)}&imageurl=${encodeURIComponent(imageUrl || '')}`;
+
+        const { data } = await axios.get(api, {
+          timeout: 60000
+        });
 
         if (!data?.response) {
           throw new Error('Gemini failed');
@@ -178,11 +224,14 @@ module.exports = {
         response = data.response.trim();
       }
 
-      saveMemory(senderId, question, response);
+      // ===== SAVE MEMORY =====
+      saveMemory(senderId, finalQuestion, response);
 
+      // ===== SEND PAGINATED =====
       const pages = paginate(response, usedModel);
 
       for (let i = 0; i < pages.length; i++) {
+
         let msg = pages[i];
 
         if (pages.length > 1) {
@@ -191,14 +240,25 @@ module.exports = {
 
         msg += '\n・──── >ᴗ< ─────・';
 
-        await sendMessage(senderId, { text: msg }, pageAccessToken);
+        await sendMessage(
+          senderId,
+          { text: msg },
+          pageAccessToken
+        );
       }
 
     } catch (err) {
-      console.error('AI ERROR:', err.message);
+
+      console.error(
+        'AI ERROR:',
+        err.response?.data || err.message
+      );
+
       await sendMessage(
         senderId,
-        { text: '❌ AI failed. Try later.' },
+        {
+          text: '❌ AI failed. Try later.'
+        },
         pageAccessToken
       );
     }
