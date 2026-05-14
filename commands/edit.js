@@ -10,30 +10,42 @@ module.exports = {
   async execute(senderId, args, pageAccessToken, event) {
     try {
 
-      // 🔥 GET PROMPT
       let prompt = args.join(" ").trim();
 
-      // 🔥 CHECK REPLY
-      const replied =
-        event?.message?.reply_to?.attachments ||
-        event?.messageReply?.attachments;
+      // 🔥 DEBUG EVENT
+      console.log(JSON.stringify(event, null, 2));
 
-      if (!replied || replied.length === 0) {
+      // 🔥 GET REPLIED MESSAGE
+      let repliedMessage =
+        event?.message?.reply_to ||
+        event?.messageReply ||
+        event?.reply_to_message;
+
+      // 🔥 GET ATTACHMENTS
+      let attachments =
+        repliedMessage?.attachments ||
+        repliedMessage?.message?.attachments ||
+        [];
+
+      if (!attachments.length) {
         console.log("No replied image");
         return;
       }
 
-      const attachment = replied[0];
+      // 🔥 FIND IMAGE
+      const imageAttachment = attachments.find(
+        att => att.type === "image"
+      );
 
-      if (attachment.type !== "image") {
+      if (!imageAttachment) {
         console.log("Reply is not image");
         return;
       }
 
-      // 🔥 IMAGE URL
+      // 🔥 GET IMAGE URL
       const imageUrl =
-        attachment.payload?.url ||
-        attachment.url;
+        imageAttachment.payload?.url ||
+        imageAttachment.url;
 
       if (!imageUrl) {
         console.log("No image URL");
@@ -45,13 +57,13 @@ module.exports = {
         prompt = "make it aesthetic";
       }
 
-      // 🔥 API URL
+      // 🔥 API
       const api =
         `https://azadx69x-all-apis-top.vercel.app/api/editor?url=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`;
 
       console.log("API:", api);
 
-      // 🔥 SEND LOADING
+      // 🔥 LOADING MESSAGE
       await axios.post(
         `https://graph.facebook.com/v19.0/me/messages?access_token=${pageAccessToken}`,
         {
@@ -64,15 +76,15 @@ module.exports = {
         }
       );
 
-      // 🔥 GET EDITED IMAGE
+      // 🔥 DOWNLOAD EDITED IMAGE
       const img = await axios.get(api, {
         responseType: "arraybuffer",
         timeout: 120000
       });
 
-      console.log("Image received");
+      console.log("Edited image received");
 
-      // 🔥 FORM DATA
+      // 🔥 SEND IMAGE
       const form = new FormData();
 
       form.append(
@@ -98,7 +110,6 @@ module.exports = {
         "edited.jpg"
       );
 
-      // 🔥 SEND IMAGE
       await axios.post(
         `https://graph.facebook.com/v19.0/me/messages?access_token=${pageAccessToken}`,
         form,
