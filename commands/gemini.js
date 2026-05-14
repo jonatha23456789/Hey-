@@ -1,7 +1,7 @@
 const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
 
-// 🔹 découpe message Messenger
+// 🔹 split long messages
 function splitMessage(text, maxLength = 1900) {
   const chunks = [];
 
@@ -12,6 +12,31 @@ function splitMessage(text, maxLength = 1900) {
   return chunks;
 }
 
+// 🔥 get replied image from Messenger API
+async function getReplyImage(event, token) {
+
+  const mid = event?.message?.reply_to?.mid;
+
+  if (!mid) return null;
+
+  try {
+
+    const { data } = await axios.get(
+      `https://graph.facebook.com/v19.0/${mid}/attachments`,
+      {
+        params: {
+          access_token: token
+        }
+      }
+    );
+
+    return data?.data?.[0]?.image_data?.url || null;
+
+  } catch (e) {
+    return null;
+  }
+}
+
 module.exports = {
   name: ['gemini'],
   description: 'Gemini AI with image analysis',
@@ -19,33 +44,30 @@ module.exports = {
   author: 'Jonathan',
 
   async execute(senderId, args, pageAccessToken, event) {
+
     try {
 
       let prompt = args.join(' ').trim();
-      let imgUrl = '';
 
-      // 🔥 detect image reply
-      if (event?.message?.reply_to?.attachments) {
+      // 🔥 image from reply
+      let imgUrl = await getReplyImage(
+        event,
+        pageAccessToken
+      );
 
-        const att = event.message.reply_to.attachments[0];
-
-        if (att.type === 'image') {
-
-          imgUrl = att.payload.url;
-
-          // auto describe image
-          if (!prompt) {
-            prompt = 'Describe this image in detail';
-          }
-        }
+      // 🔥 auto describe image
+      if (!prompt && imgUrl) {
+        prompt = 'Describe this image in detail';
       }
 
       // ❌ no prompt
       if (!prompt) {
+
         return sendMessage(
           senderId,
           {
-            text: '⚠️ Usage: -gemini <question> or reply to an image'
+            text:
+              '⚠️ Usage: -gemini <question> or reply to image'
           },
           pageAccessToken
         );
@@ -55,20 +77,20 @@ module.exports = {
       await sendMessage(
         senderId,
         {
-          text: ''
+          text: '⏳ Gemini is thinking...'
         },
         pageAccessToken
       );
 
       // 🔥 NEW API
       const apiUrl =
-        `https://norch-project.gleeze.com/api/gemini/2.5/flash-lite?prompt=${encodeURIComponent(prompt)}&imageurl=${encodeURIComponent(imgUrl)}`;
+        `https://norch-project.gleeze.com/api/gemini?prompt=${encodeURIComponent(prompt)}&imageurl=${encodeURIComponent(imgUrl || '')}`;
 
       const { data } = await axios.get(apiUrl, {
         timeout: 60000
       });
 
-      // 🔥 response extraction
+      // 🔥 extract response
       const replyText = data?.response;
 
       if (!replyText) {
@@ -86,13 +108,13 @@ module.exports = {
 
       const reply =
 `${deco}
-🤖 | GEMINI 2.5 FLASH
+🤖 | GEMINI AI
 
 ${replyText.trim()}
 
 ${deco}`;
 
-      // 🔹 split long messages
+      // 🔹 split if long
       const chunks = splitMessage(reply);
 
       for (const chunk of chunks) {
@@ -116,7 +138,8 @@ ${deco}`;
       await sendMessage(
         senderId,
         {
-          text: '🚨 Error while contacting Gemini API.'
+          text:
+            '🚨 Error while contacting Gemini API.'
         },
         pageAccessToken
       );
