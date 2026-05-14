@@ -55,7 +55,7 @@ module.exports = {
       await sendMessage(
         senderId,
         {
-          text: '⏳ Thinking...'
+          text: ''
         },
         pageAccessToken
       );
