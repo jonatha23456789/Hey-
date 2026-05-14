@@ -3,88 +3,58 @@ const FormData = require("form-data");
 
 module.exports = {
   name: "edit",
-  description: "AI image editor",
-  usage: "-edit <prompt> (reply to image)",
+  description: "Edit replied image with AI",
+  usage: "-edit <prompt>",
   author: "Jonathan",
 
   async execute(senderId, args, pageAccessToken, event) {
     try {
+      const prompt = args.join(" ").trim();
 
-      let prompt = args.join(" ").trim();
-
-      // 🔥 DEBUG EVENT
-      console.log(JSON.stringify(event, null, 2));
-
-      // 🔥 GET REPLIED MESSAGE
-      let repliedMessage =
-        event?.message?.reply_to ||
-        event?.messageReply ||
-        event?.reply_to_message;
-
-      // 🔥 GET ATTACHMENTS
-      let attachments =
-        repliedMessage?.attachments ||
-        repliedMessage?.message?.attachments ||
-        [];
-
-      if (!attachments.length) {
-        console.log("No replied image");
+      if (!prompt) {
         return;
       }
 
-      // 🔥 FIND IMAGE
-      const imageAttachment = attachments.find(
-        att => att.type === "image"
-      );
+      // 🔹 vérifier reply
+      const replyMid = event?.message?.reply_to?.mid;
 
-      if (!imageAttachment) {
-        console.log("Reply is not image");
+      if (!replyMid) {
+        console.log("No reply detected");
         return;
       }
 
-      // 🔥 GET IMAGE URL
-      const imageUrl =
-        imageAttachment.payload?.url ||
-        imageAttachment.url;
+      // 🔥 GET ORIGINAL MESSAGE
+      const msgApi =
+        `https://graph.facebook.com/v19.0/${replyMid}?fields=attachments&access_token=${pageAccessToken}`;
+
+      const msgRes = await axios.get(msgApi);
+
+      const attachments = msgRes.data.attachments?.data;
+
+      if (!attachments || attachments.length === 0) {
+        console.log("No attachment found");
+        return;
+      }
+
+      const imageUrl = attachments[0]?.image_data?.url;
 
       if (!imageUrl) {
         console.log("No image URL");
         return;
       }
 
-      // 🔥 DEFAULT PROMPT
-      if (!prompt) {
-        prompt = "make it aesthetic";
-      }
+      console.log("IMAGE URL:", imageUrl);
 
-      // 🔥 API
+      // 🔥 EDIT API
       const api =
         `https://azadx69x-all-apis-top.vercel.app/api/editor?url=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`;
 
-      console.log("API:", api);
-
-      // 🔥 LOADING MESSAGE
-      await axios.post(
-        `https://graph.facebook.com/v19.0/me/messages?access_token=${pageAccessToken}`,
-        {
-          recipient: {
-            id: senderId
-          },
-          message: {
-            text: "🎨 Editing image..."
-          }
-        }
-      );
-
-      // 🔥 DOWNLOAD EDITED IMAGE
+      // 🔥 GET IMAGE AS BUFFER
       const img = await axios.get(api, {
         responseType: "arraybuffer",
-        timeout: 120000
+        timeout: 60000
       });
 
-      console.log("Edited image received");
-
-      // 🔥 SEND IMAGE
       const form = new FormData();
 
       form.append(
@@ -107,41 +77,24 @@ module.exports = {
       form.append(
         "filedata",
         Buffer.from(img.data),
-        "edited.jpg"
+        "edited.png"
       );
 
+      // 🔥 SEND IMAGE
       await axios.post(
         `https://graph.facebook.com/v19.0/me/messages?access_token=${pageAccessToken}`,
         form,
         {
           headers: form.getHeaders(),
-          maxBodyLength: Infinity,
-          maxContentLength: Infinity
+          maxBodyLength: Infinity
         }
       );
 
-      console.log("Edited image sent");
-
     } catch (err) {
-
       console.error(
         "EDIT CMD ERROR:",
         err.response?.data || err.message
       );
-
-      try {
-        await axios.post(
-          `https://graph.facebook.com/v19.0/me/messages?access_token=${pageAccessToken}`,
-          {
-            recipient: {
-              id: senderId
-            },
-            message: {
-              text: "❌ Failed to edit image."
-            }
-          }
-        );
-      } catch {}
     }
   }
 };
