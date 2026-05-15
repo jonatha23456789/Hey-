@@ -1,9 +1,10 @@
 const axios = require('axios');
 const FormData = require('form-data');
+const sharp = require('sharp');
 
 module.exports = {
   name: 'waifu',
-  description: 'Random waifu image',
+  description: 'Random waifu image 9:16',
   usage: '-waifu [1-5]',
   author: 'Jonathan',
 
@@ -18,51 +19,30 @@ module.exports = {
 
       try {
 
-        // =========================
         // 🔥 GET IMAGE URL
-        // =========================
-
         const { data } = await axios.get(
-          'https://nekos.life/api/v2/img/waifu',
-          {
-            timeout: 30000,
-            headers: {
-              'User-Agent': 'Mozilla/5.0'
-            }
-          }
+          'https://nekos.life/api/v2/img/waifu'
         );
 
         const imageUrl = data?.url;
 
-        if (!imageUrl) {
-          console.log('No image URL');
-          continue;
-        }
+        if (!imageUrl) continue;
 
-        // =========================
         // 🔥 DOWNLOAD IMAGE
-        // =========================
-
         const img = await axios.get(imageUrl, {
-          responseType: 'arraybuffer',
-          timeout: 30000,
-          headers: {
-            'User-Agent': 'Mozilla/5.0',
-            'Referer': 'https://nekos.life/'
-          }
+          responseType: 'arraybuffer'
         });
 
-        const contentType = img.headers['content-type'];
+        // 🔥 CONVERT TO 9:16
+        const finalImage = await sharp(img.data)
+          .resize(720, 1280, {
+            fit: 'cover',
+            position: 'center'
+          })
+          .jpeg({ quality: 90 })
+          .toBuffer();
 
-        if (!contentType?.startsWith('image')) {
-          console.log('Invalid image type');
-          continue;
-        }
-
-        // =========================
-        // 🔥 SEND TO FACEBOOK
-        // =========================
-
+        // 🔥 SEND TO FB
         const form = new FormData();
 
         form.append(
@@ -84,8 +64,8 @@ module.exports = {
 
         form.append(
           'filedata',
-          Buffer.from(img.data),
-          `waifu_${Date.now()}.jpg`
+          finalImage,
+          'waifu_vertical.jpg'
         );
 
         await axios.post(
@@ -97,11 +77,11 @@ module.exports = {
           }
         );
 
-      } catch (error) {
+      } catch (err) {
 
         console.error(
           'Waifu CMD Error:',
-          error.response?.data || error.message
+          err.response?.data || err.message
         );
       }
     }
