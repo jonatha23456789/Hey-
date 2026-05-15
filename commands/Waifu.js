@@ -2,38 +2,38 @@ const axios = require('axios');
 
 module.exports = {
   name: 'waifu',
-  description: 'Random waifu image',
-  usage: '-waifu',
+  description: 'Random anime waifu images (multi styles)',
+  usage: '-waifu [neko|hug|kiss|smile]',
   author: 'Jonathan',
 
   async execute(senderId, args, pageAccessToken, event, sendMessage) {
     try {
 
-      // 🔥 API FIXED
+      // 🎯 TYPE (default = waifu)
+      const type = args[0]?.toLowerCase() || 'waifu';
+
+      // 🎭 MAP STYLE → nekos.best endpoints
+      const validTypes = ['waifu', 'neko', 'hug', 'kiss', 'smile'];
+
+      const finalType = validTypes.includes(type) ? type : 'waifu';
+
       const { data } = await axios.get(
-        'https://api.waifu.im/search',
-        {
-          params: {
-            included_tags: 'waifu'
-          },
-          headers: {
-            'User-Agent': 'Mozilla/5.0'
-          },
-          timeout: 30000
-        }
+        `https://nekos.best/api/v2/${finalType}`,
+        { timeout: 30000 }
       );
 
-      const imageUrl = data?.images?.[0]?.url;
+      const imageUrl = data?.results?.[0]?.url;
+      const animeName = data?.results?.[0]?.anime_name || 'Unknown';
 
       if (!imageUrl) {
         return sendMessage(
           senderId,
-          { text: '❌ No waifu found, try again.' },
+          { text: '❌ No image found, try again.' },
           pageAccessToken
         );
       }
 
-      // 🔥 SEND IMAGE DIRECT (NO DOWNLOAD NEEDED)
+      // 📤 SEND IMAGE
       await sendMessage(
         senderId,
         {
@@ -44,6 +44,20 @@ module.exports = {
               is_reusable: true
             }
           }
+        },
+        pageAccessToken
+      );
+
+      // 💬 INFO MESSAGE
+      await sendMessage(
+        senderId,
+        {
+          text:
+`💖 Waifu Generated!
+
+🎭 Type: ${finalType}
+🎬 Anime: ${animeName}
+✨ Enjoy your waifu 💕`
         },
         pageAccessToken
       );
