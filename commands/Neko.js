@@ -1,31 +1,100 @@
 const axios = require('axios');
-const { sendMessage } = require('../handles/sendMessage');
+const FormData = require('form-data');
 
 module.exports = {
-  name: 'neko',
-  description: 'Envoie une image de neko.',
-  usage: '-neko',
-  author: 'kelvin',
+  name: 'waifu',
+  description: 'Send random waifu images',
+  usage: '-waifu [1-5]',
+  author: 'Jonathan',
 
   async execute(senderId, args, pageAccessToken) {
-    try {
-      // Appel à l'API nekos.life pour obtenir une image de neko
-      const response = await axios.get('https://nekos.life/api/v2/img/neko');
-      const imageUrl = response.data.url;
 
-      // Envoi de l'image à l'utilisateur
-      await sendMessage(senderId, {
-        attachment: {
-          type: 'image',
-          payload: {
-            url: imageUrl,
-            is_reusable: true
+    let count = parseInt(args[0]) || 1;
+
+    if (count < 1) count = 1;
+    if (count > 5) count = 5;
+
+    for (let i = 0; i < count; i++) {
+
+      try {
+
+        // 🔥 GET IMAGE
+        const { data } = await axios.get(
+          'https://api.nekosia.cat/api/v1/images/waifu',
+          {
+            timeout: 30000,
+            headers: {
+              'User-Agent': 'Mozilla/5.0'
+            }
           }
+        );
+
+        const imageUrl = data?.image?.original?.url;
+
+        if (!imageUrl) {
+          console.log('No image URL');
+          continue;
         }
-      }, pageAccessToken);
-    } catch (error) {
-      console.error('Erreur lors de la récupération de l\'image neko:', error.message);
-      sendMessage(senderId, { text: '❌ Impossible de récupérer une image de neko.' }, pageAccessToken);
+
+        // 🔥 DOWNLOAD IMAGE BUFFER
+        const img = await axios.get(imageUrl, {
+          responseType: 'arraybuffer',
+          timeout: 30000,
+          headers: {
+            'User-Agent': 'Mozilla/5.0'
+          }
+        });
+
+        // 🔥 VERIFY IMAGE
+        const contentType = img.headers['content-type'];
+
+        if (!contentType?.startsWith('image')) {
+          console.log('Invalid image type:', contentType);
+          continue;
+        }
+
+        // 🔥 SEND TO FB
+        const form = new FormData();
+
+        form.append(
+          'recipient',
+          JSON.stringify({
+            id: senderId
+          })
+        );
+
+        form.append(
+          'message',
+          JSON.stringify({
+            attachment: {
+              type: 'image',
+              payload: {}
+            }
+          })
+        );
+
+        form.append(
+          'filedata',
+          Buffer.from(img.data),
+          `waifu_${Date.now()}.jpg`
+        );
+
+        await axios.post(
+          `https://graph.facebook.com/v19.0/me/messages?access_token=${pageAccessToken}`,
+          form,
+          {
+            headers: form.getHeaders(),
+            maxBodyLength: Infinity
+          }
+        );
+
+      } catch (error) {
+
+        console.error(
+          'Waifu CMD Error:',
+          error.response?.data || error.message
+        );
+      }
     }
   }
 };
