@@ -3,7 +3,7 @@ const FormData = require('form-data');
 
 module.exports = {
   name: 'waifu',
-  description: 'Send random waifu images',
+  description: 'Random waifu image',
   usage: '-waifu [1-5]',
   author: 'Jonathan',
 
@@ -18,9 +18,12 @@ module.exports = {
 
       try {
 
-        // 🔥 GET IMAGE
+        // =========================
+        // 🔥 GET IMAGE URL
+        // =========================
+
         const { data } = await axios.get(
-          'https://api.nekosia.cat/api/v1/images/waifu',
+          'https://nekos.life/api/v2/img/waifu',
           {
             timeout: 30000,
             headers: {
@@ -29,31 +32,37 @@ module.exports = {
           }
         );
 
-        const imageUrl = data?.image?.original?.url;
+        const imageUrl = data?.url;
 
         if (!imageUrl) {
           console.log('No image URL');
           continue;
         }
 
-        // 🔥 DOWNLOAD IMAGE BUFFER
+        // =========================
+        // 🔥 DOWNLOAD IMAGE
+        // =========================
+
         const img = await axios.get(imageUrl, {
           responseType: 'arraybuffer',
           timeout: 30000,
           headers: {
-            'User-Agent': 'Mozilla/5.0'
+            'User-Agent': 'Mozilla/5.0',
+            'Referer': 'https://nekos.life/'
           }
         });
 
-        // 🔥 VERIFY IMAGE
         const contentType = img.headers['content-type'];
 
         if (!contentType?.startsWith('image')) {
-          console.log('Invalid image type:', contentType);
+          console.log('Invalid image type');
           continue;
         }
 
-        // 🔥 SEND TO FB
+        // =========================
+        // 🔥 SEND TO FACEBOOK
+        // =========================
+
         const form = new FormData();
 
         form.append(
