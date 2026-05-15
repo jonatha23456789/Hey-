@@ -3,8 +3,8 @@ const FormData = require('form-data');
 
 module.exports = {
   name: 'waifu',
-  description: 'Send random waifu images',
-  usage: '-waifu [count]',
+  description: 'Random waifu images',
+  usage: '-waifu [1-5]',
   author: 'Jonathan',
 
   async execute(senderId, args, pageAccessToken) {
@@ -18,60 +18,43 @@ module.exports = {
 
       try {
 
-        let imageUrl = null;
-
-        // 🔥 API 1
-        try {
-
-          const { data } = await axios.get(
-            'https://api.waifu.im/search?included_tags=waifu',
-            { timeout: 20000 }
-          );
-
-          imageUrl = data?.images?.[0]?.url;
-
-        } catch (e) {
-          console.log('API 1 failed');
-        }
-
-        // 🔥 API 2 fallback
-        if (!imageUrl) {
-
-          try {
-
-            const { data } = await axios.get(
-              'https://nekos.best/api/v2/waifu',
-              { timeout: 20000 }
-            );
-
-            imageUrl = data?.results?.[0]?.url;
-
-          } catch (e) {
-            console.log('API 2 failed');
+        // 🔥 WORKING API
+        const { data } = await axios.get(
+          'https://nekos.best/api/v2/waifu',
+          {
+            timeout: 30000,
+            headers: {
+              'User-Agent': 'Mozilla/5.0'
+            }
           }
-        }
+        );
 
-        // ❌ no image
+        const imageUrl = data?.results?.[0]?.url;
+
         if (!imageUrl) {
+          console.log('No image URL');
           continue;
         }
 
-        // =========================
-        // 🔥 DOWNLOAD IMAGE
-        // =========================
-
+        // 🔥 DOWNLOAD IMAGE BUFFER
         const img = await axios.get(imageUrl, {
           responseType: 'arraybuffer',
           timeout: 30000,
           headers: {
-            'User-Agent': 'Mozilla/5.0'
+            'User-Agent': 'Mozilla/5.0',
+            'Referer': 'https://nekos.best/'
           }
         });
 
-        // =========================
-        // 🔥 SEND WITH FORMDATA
-        // =========================
+        // 🔥 CHECK HTML ERROR
+        const contentType = img.headers['content-type'];
 
+        if (!contentType || !contentType.startsWith('image')) {
+          console.log('Invalid image type:', contentType);
+          continue;
+        }
+
+        // 🔥 SEND IMAGE
         const form = new FormData();
 
         form.append(
@@ -94,21 +77,22 @@ module.exports = {
         form.append(
           'filedata',
           Buffer.from(img.data),
-          `waifu_${Date.now()}.jpg`
+          `waifu_${Date.now()}.png`
         );
 
         await axios.post(
           `https://graph.facebook.com/v19.0/me/messages?access_token=${pageAccessToken}`,
           form,
           {
-            headers: form.getHeaders()
+            headers: form.getHeaders(),
+            maxBodyLength: Infinity
           }
         );
 
       } catch (error) {
 
         console.error(
-          'Waifu Command Error:',
+          'Waifu CMD Error:',
           error.response?.data || error.message
         );
       }
