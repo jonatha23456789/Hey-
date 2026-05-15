@@ -3,7 +3,7 @@ const FormData = require('form-data');
 
 module.exports = {
   name: 'waifu',
-  description: 'Random waifu images',
+  description: 'Send random waifu images',
   usage: '-waifu [1-5]',
   author: 'Jonathan',
 
@@ -18,9 +18,9 @@ module.exports = {
 
       try {
 
-        // 🔥 WORKING API
+        // 🔥 GET IMAGE
         const { data } = await axios.get(
-          'https://nekos.best/api/v2/waifu',
+          'https://api.nekosia.cat/api/v1/images/waifu',
           {
             timeout: 30000,
             headers: {
@@ -29,7 +29,7 @@ module.exports = {
           }
         );
 
-        const imageUrl = data?.results?.[0]?.url;
+        const imageUrl = data?.image?.original?.url;
 
         if (!imageUrl) {
           console.log('No image URL');
@@ -41,20 +41,19 @@ module.exports = {
           responseType: 'arraybuffer',
           timeout: 30000,
           headers: {
-            'User-Agent': 'Mozilla/5.0',
-            'Referer': 'https://nekos.best/'
+            'User-Agent': 'Mozilla/5.0'
           }
         });
 
-        // 🔥 CHECK HTML ERROR
+        // 🔥 VERIFY IMAGE
         const contentType = img.headers['content-type'];
 
-        if (!contentType || !contentType.startsWith('image')) {
+        if (!contentType?.startsWith('image')) {
           console.log('Invalid image type:', contentType);
           continue;
         }
 
-        // 🔥 SEND IMAGE
+        // 🔥 SEND TO FB
         const form = new FormData();
 
         form.append(
@@ -77,7 +76,7 @@ module.exports = {
         form.append(
           'filedata',
           Buffer.from(img.data),
-          `waifu_${Date.now()}.png`
+          `waifu_${Date.now()}.jpg`
         );
 
         await axios.post(
