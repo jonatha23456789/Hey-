@@ -1,10 +1,9 @@
 const axios = require('axios');
-const FormData = require('form-data');
-const sharp = require('sharp');
+const { sendMessage } = require('../handles/sendMessage');
 
 module.exports = {
   name: 'waifu',
-  description: 'Random waifu image 9:16',
+  description: 'Vertical waifu images',
   usage: '-waifu [1-5]',
   author: 'Jonathan',
 
@@ -19,69 +18,61 @@ module.exports = {
 
       try {
 
-        // 🔥 GET IMAGE URL
+        // 🔥 API
         const { data } = await axios.get(
-          'https://nekos.life/api/v2/img/waifu'
-        );
-
-        const imageUrl = data?.url;
-
-        if (!imageUrl) continue;
-
-        // 🔥 DOWNLOAD IMAGE
-        const img = await axios.get(imageUrl, {
-          responseType: 'arraybuffer'
-        });
-
-        // 🔥 CONVERT TO 9:16
-        const finalImage = await sharp(img.data)
-          .resize(720, 1280, {
-            fit: 'cover',
-            position: 'center'
-          })
-          .jpeg({ quality: 90 })
-          .toBuffer();
-
-        // 🔥 SEND TO FB
-        const form = new FormData();
-
-        form.append(
-          'recipient',
-          JSON.stringify({
-            id: senderId
-          })
-        );
-
-        form.append(
-          'message',
-          JSON.stringify({
-            attachment: {
-              type: 'image',
-              payload: {}
-            }
-          })
-        );
-
-        form.append(
-          'filedata',
-          finalImage,
-          'waifu_vertical.jpg'
-        );
-
-        await axios.post(
-          `https://graph.facebook.com/v19.0/me/messages?access_token=${pageAccessToken}`,
-          form,
+          'https://api.waifu.im/search?included_tags=waifu',
           {
-            headers: form.getHeaders(),
-            maxBodyLength: Infinity
+            timeout: 30000,
+            headers: {
+              'User-Agent': 'Mozilla/5.0'
+            }
           }
         );
 
-      } catch (err) {
+        const imageUrl = data?.images?.[0]?.url;
+
+        if (!imageUrl) {
+          await sendMessage(
+            senderId,
+            { text: '❌ Failed to fetch waifu image.' },
+            pageAccessToken
+          );
+          continue;
+        }
+
+        // 🔥 SEND VERTICAL TEMPLATE
+        await sendMessage(
+          senderId,
+          {
+            attachment: {
+              type: 'template',
+              payload: {
+                template_type: 'media',
+                elements: [
+                  {
+                    media_type: 'image',
+                    url: imageUrl
+                  }
+                ]
+              }
+            }
+          },
+          pageAccessToken
+        );
+
+      } catch (error) {
 
         console.error(
           'Waifu CMD Error:',
-          err.response?.data || err.message
+          error.response?.data || error.message
+        );
+
+        await sendMessage(
+          senderId,
+          {
+            text: '❌ Error while fetching waifu image.'
+          },
+          pageAccessToken
         );
       }
     }
