@@ -10,12 +10,11 @@ module.exports = {
   async execute(senderId, args, pageAccessToken, event, sendMessage) {
     try {
 
-      // 🎭 TYPE
       const type = args[0]?.toLowerCase() || 'waifu';
       const valid = ['waifu', 'neko', 'hug', 'kiss', 'smile'];
       const finalType = valid.includes(type) ? type : 'waifu';
 
-      // 🔥 API (GIF support)
+      // 🔥 API
       const { data } = await axios.get(
         `https://nekos.best/api/v2/${finalType}`,
         { timeout: 30000 }
@@ -28,12 +27,27 @@ module.exports = {
       if (!mediaUrl) {
         return sendMessage(
           senderId,
-          { text: '❌ No waifu GIF found.' },
+          { text: '❌ No waifu found.' },
           pageAccessToken
         );
       }
 
-      // 📥 DOWNLOAD GIF/IMAGE
+      // 💬 1️⃣ TEXT FIRST
+      await sendMessage(
+        senderId,
+        {
+          text:
+`💖 WAIFU GENERATED
+
+🎭 Type: ${finalType}
+🎬 Anime: ${animeName}
+🎨 Artist: ${artist}
+✨ Sending image...`
+        },
+        pageAccessToken
+      );
+
+      // 📥 DOWNLOAD MEDIA
       const media = await axios.get(mediaUrl, {
         responseType: 'arraybuffer',
         timeout: 30000
@@ -52,7 +66,7 @@ module.exports = {
         'message',
         JSON.stringify({
           attachment: {
-            type: isGif ? 'image' : 'image',
+            type: 'image',
             payload: {}
           }
         })
@@ -64,34 +78,19 @@ module.exports = {
         isGif ? `waifu_${Date.now()}.gif` : `waifu_${Date.now()}.jpg`
       );
 
-      // 📤 SEND TO FACEBOOK
+      // 📤 2️⃣ IMAGE SECOND
       await axios.post(
         `https://graph.facebook.com/v19.0/me/messages?access_token=${pageAccessToken}`,
         form,
         { headers: form.getHeaders() }
       );
 
-      // 💬 INFO MESSAGE
-      await sendMessage(
-        senderId,
-        {
-          text:
-`💖 WAIFU ANIME GENERATED
-
-🎭 Type: ${finalType}
-🎬 Anime: ${animeName}
-🎨 Artist: ${artist}
-✨ Enjoy 💕`
-        },
-        pageAccessToken
-      );
-
     } catch (error) {
-      console.error('Waifu GIF CMD Error:', error.response?.data || error.message);
+      console.error('Waifu CMD Error:', error.response?.data || error.message);
 
       await sendMessage(
         senderId,
-        { text: '❌ Waifu GIF error, try again later.' },
+        { text: '❌ Waifu error, try again later.' },
         pageAccessToken
       );
     }
