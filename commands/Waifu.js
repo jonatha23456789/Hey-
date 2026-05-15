@@ -1,25 +1,18 @@
 const axios = require('axios');
-const { sendMessage } = require('../handles/sendMessage');
+const FormData = require('form-data');
 
 module.exports = {
   name: 'waifu',
   description: 'Send random waifu images',
-  usage: '-waifu [count 1-5]',
+  usage: '-waifu [count]',
   author: 'Jonathan',
 
   async execute(senderId, args, pageAccessToken) {
 
-    // 🔥 number of images
     let count = parseInt(args[0]) || 1;
 
     if (count < 1) count = 1;
     if (count > 5) count = 5;
-
-    // 🔥 WORKING APIs
-    const apis = [
-      'https://api.waifu.im/search?included_tags=waifu',
-      'https://nekos.best/api/v2/waifu'
-    ];
 
     for (let i = 0; i < count; i++) {
 
@@ -27,14 +20,13 @@ module.exports = {
 
         let imageUrl = null;
 
-        // =========================
-        // 🔥 API 1 (waifu.im)
-        // =========================
+        // 🔥 API 1
         try {
 
-          const { data } = await axios.get(apis[0], {
-            timeout: 20000
-          });
+          const { data } = await axios.get(
+            'https://api.waifu.im/search?included_tags=waifu',
+            { timeout: 20000 }
+          );
 
           imageUrl = data?.images?.[0]?.url;
 
@@ -42,16 +34,15 @@ module.exports = {
           console.log('API 1 failed');
         }
 
-        // =========================
-        // 🔥 API 2 (nekos.best)
-        // =========================
+        // 🔥 API 2 fallback
         if (!imageUrl) {
 
           try {
 
-            const { data } = await axios.get(apis[1], {
-              timeout: 20000
-            });
+            const { data } = await axios.get(
+              'https://nekos.best/api/v2/waifu',
+              { timeout: 20000 }
+            );
 
             imageUrl = data?.results?.[0]?.url;
 
@@ -62,31 +53,56 @@ module.exports = {
 
         // ❌ no image
         if (!imageUrl) {
-
-          await sendMessage(
-            senderId,
-            {
-              text: '❌ Failed to fetch waifu image.'
-            },
-            pageAccessToken
-          );
-
           continue;
         }
 
-        // ✅ send image
-        await sendMessage(
-          senderId,
-          {
+        // =========================
+        // 🔥 DOWNLOAD IMAGE
+        // =========================
+
+        const img = await axios.get(imageUrl, {
+          responseType: 'arraybuffer',
+          timeout: 30000,
+          headers: {
+            'User-Agent': 'Mozilla/5.0'
+          }
+        });
+
+        // =========================
+        // 🔥 SEND WITH FORMDATA
+        // =========================
+
+        const form = new FormData();
+
+        form.append(
+          'recipient',
+          JSON.stringify({
+            id: senderId
+          })
+        );
+
+        form.append(
+          'message',
+          JSON.stringify({
             attachment: {
               type: 'image',
-              payload: {
-                url: imageUrl,
-                is_reusable: true
-              }
+              payload: {}
             }
-          },
-          pageAccessToken
+          })
+        );
+
+        form.append(
+          'filedata',
+          Buffer.from(img.data),
+          `waifu_${Date.now()}.jpg`
+        );
+
+        await axios.post(
+          `https://graph.facebook.com/v19.0/me/messages?access_token=${pageAccessToken}`,
+          form,
+          {
+            headers: form.getHeaders()
+          }
         );
 
       } catch (error) {
@@ -94,15 +110,6 @@ module.exports = {
         console.error(
           'Waifu Command Error:',
           error.response?.data || error.message
-        );
-
-        await sendMessage(
-          senderId,
-          {
-            text:
-              '❌ Error while fetching waifu image.'
-          },
-          pageAccessToken
         );
       }
     }
