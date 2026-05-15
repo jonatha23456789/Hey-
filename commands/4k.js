@@ -9,9 +9,12 @@ const getImageUrl = async (event, token) => {
   if (!mid) return null;
 
   try {
-    const { data } = await axios.get(`https://graph.facebook.com/v22.0/${mid}/attachments`, {
-      params: { access_token: token }
-    });
+    const { data } = await axios.get(
+      `https://graph.facebook.com/v22.0/${mid}/attachments`,
+      {
+        params: { access_token: token }
+      }
+    );
 
     return data?.data?.[0]?.image_data?.url || data?.data?.[0]?.file_url || null;
   } catch (err) {
@@ -22,58 +25,68 @@ const getImageUrl = async (event, token) => {
 
 module.exports = {
   name: '4k',
-  description: 'Enhance low-quality images using Pixelcut upscaler.',
-  usage: '-upscale (reply to a photo)',
+  description: 'Enhance image using AZADX 4K API',
+  usage: '-4k (reply to image)',
   author: 'coffee',
 
   async execute(senderId, args, pageAccessToken, event) {
+
     const imageUrl = await getImageUrl(event, pageAccessToken);
+
     if (!imageUrl) {
-      return sendMessage(senderId, { text: '❎ | Please reply to an image to enhance it.' }, pageAccessToken);
+      return sendMessage(
+        senderId,
+        { text: '❎ | Please reply to an image.' },
+        pageAccessToken
+      );
     }
 
-    const tmpInput = path.join(__dirname, `tmp_upscale_${Date.now()}.jpg`);
     try {
-      // Download the original image
-      const imgResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
-      fs.writeFileSync(tmpInput, imgResponse.data);
 
-      // Prepare form data for Pixelcut
-      const form = new FormData();
-      form.append('image', fs.createReadStream(tmpInput), 'image.jpg');
-
-      const upscaleRes = await axios.post(
-        'https://api2.pixelcut.app/image/upscale/v1',
-        form,
-        {
-          headers: {
-            ...form.getHeaders(),
-            'User-Agent': 'Mozilla/5.0 (Android 10)',
-            'X-Client-Version': 'web',
-            'Accept': 'application/json',
-            'Accept-Language': 'en-US,en;q=0.8'
-          }
-        }
+      // 💬 loading
+      await sendMessage(
+        senderId,
+        { text: '🔄 Enhancing image to 4K, please wait...' },
+        pageAccessToken
       );
 
-      const resultUrl = upscaleRes?.data?.result_url;
+      // 🔥 NEW API
+      const apiUrl =
+        `https://azadx69x-all-apis-top.vercel.app/api/4k?imgUrl=${encodeURIComponent(imageUrl)}`;
+
+      const { data } = await axios.get(apiUrl, { timeout: 60000 });
+
+      const resultUrl = data?.result || data?.image || data?.url;
+
       if (!resultUrl) {
-        return sendMessage(senderId, { text: '❎ | Upscale failed. Please try again later.' }, pageAccessToken);
+        return sendMessage(
+          senderId,
+          { text: '❎ | 4K API failed to process image.' },
+          pageAccessToken
+        );
       }
 
-      // Download the upscaled image
-      const resultImg = await axios.get(resultUrl, { responseType: 'arraybuffer' });
-      const tmpOutput = path.join(__dirname, `tmp_result_${Date.now()}.jpg`);
+      // 📥 download result
+      const resultImg = await axios.get(resultUrl, {
+        responseType: 'arraybuffer'
+      });
+
+      const tmpOutput = path.join(__dirname, `tmp_4k_${Date.now()}.jpg`);
       fs.writeFileSync(tmpOutput, resultImg.data);
 
-      // Upload to Facebook
+      // 📤 upload to Facebook
       const fbForm = new FormData();
-      fbForm.append('message', JSON.stringify({
-        attachment: {
-          type: 'image',
-          payload: { is_reusable: true }
-        }
-      }));
+
+      fbForm.append(
+        'message',
+        JSON.stringify({
+          attachment: {
+            type: 'image',
+            payload: { is_reusable: true }
+          }
+        })
+      );
+
       fbForm.append('filedata', fs.createReadStream(tmpOutput));
 
       const uploadRes = await axios.post(
@@ -100,11 +113,15 @@ module.exports = {
       );
 
       fs.unlinkSync(tmpOutput);
+
     } catch (err) {
-      console.error('Remini Error:', err.response?.data || err.message || err);
-      sendMessage(senderId, { text: '❎ | Failed to upscale the image.' }, pageAccessToken);
-    } finally {
-      if (fs.existsSync(tmpInput)) fs.unlinkSync(tmpInput);
+      console.error('4K CMD Error:', err.response?.data || err.message);
+
+      await sendMessage(
+        senderId,
+        { text: '❎ | 4K enhancement failed.' },
+        pageAccessToken
+      );
     }
   }
 };
