@@ -1,80 +1,99 @@
 const axios = require('axios');
-const { sendMessage } = require('../handles/sendMessage');
+const FormData = require('form-data');
 
 module.exports = {
   name: 'waifu',
-  description: 'Vertical waifu images',
-  usage: '-waifu [1-5]',
+  description: 'Random waifu images',
+  usage: '-waifu [name]',
   author: 'Jonathan',
 
   async execute(senderId, args, pageAccessToken) {
 
-    let count = parseInt(args[0]) || 1;
+    try {
 
-    if (count < 1) count = 1;
-    if (count > 5) count = 5;
+      // 🔥 query
+      const query = args.join(' ').trim() || 'waifu';
 
-    for (let i = 0; i < count; i++) {
+      // 🔥 API
+      const api =
+        `https://nekos.best/api/v2/search?query=${encodeURIComponent(query)}&type=1`;
 
-      try {
+      const { data } = await axios.get(api, {
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0'
+        }
+      });
 
-        // 🔥 API
-        const { data } = await axios.get(
-          'https://api.waifu.im/search?included_tags=waifu',
+      // 🔥 get image
+      const result = data?.results?.[0];
+
+      if (!result?.url) {
+
+        return axios.post(
+          `https://graph.facebook.com/v19.0/me/messages?access_token=${pageAccessToken}`,
           {
-            timeout: 30000,
-            headers: {
-              'User-Agent': 'Mozilla/5.0'
+            recipient: {
+              id: senderId
+            },
+            message: {
+              text: '❌ No waifu found.'
             }
           }
         );
-
-        const imageUrl = data?.images?.[0]?.url;
-
-        if (!imageUrl) {
-          await sendMessage(
-            senderId,
-            { text: '❌ Failed to fetch waifu image.' },
-            pageAccessToken
-          );
-          continue;
-        }
-
-        // 🔥 SEND VERTICAL TEMPLATE
-        await sendMessage(
-          senderId,
-          {
-            attachment: {
-              type: 'template',
-              payload: {
-                template_type: 'media',
-                elements: [
-                  {
-                    media_type: 'image',
-                    url: imageUrl
-                  }
-                ]
-              }
-            }
-          },
-          pageAccessToken
-        );
-
-      } catch (error) {
-
-        console.error(
-          'Waifu CMD Error:',
-          error.response?.data || error.message
-        );
-
-        await sendMessage(
-          senderId,
-          {
-            text: '❌ Error while fetching waifu image.'
-          },
-          pageAccessToken
-        );
       }
+
+      // 🔥 download image
+      const img = await axios.get(result.url, {
+        responseType: 'arraybuffer',
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0'
+        }
+      });
+
+      // 🔥 create form
+      const form = new FormData();
+
+      form.append(
+        'recipient',
+        JSON.stringify({
+          id: senderId
+        })
+      );
+
+      form.append(
+        'message',
+        JSON.stringify({
+          attachment: {
+            type: 'image',
+            payload: {}
+          }
+        })
+      );
+
+      form.append(
+        'filedata',
+        Buffer.from(img.data),
+        `waifu_${Date.now()}.jpg`
+      );
+
+      // 🔥 send image
+      await axios.post(
+        `https://graph.facebook.com/v19.0/me/messages?access_token=${pageAccessToken}`,
+        form,
+        {
+          headers: form.getHeaders(),
+          maxBodyLength: Infinity
+        }
+      );
+
+    } catch (error) {
+
+      console.error(
+        'Waifu CMD Error:',
+        error.response?.data || error.message
+      );
     }
   }
 };
