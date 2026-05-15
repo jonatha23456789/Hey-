@@ -77,7 +77,7 @@ module.exports = {
       await sendMessage(
         senderId,
         {
-          text: '⏳ Gemini is thinking...'
+          text: ''
         },
         pageAccessToken
       );
